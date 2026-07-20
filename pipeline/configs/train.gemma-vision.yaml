@@ -1,0 +1,43 @@
+# ModelToolbox 阶段1 训练配置 —— Gemma 视觉 LoRA 微调(4bit)
+#
+# 供 ModelTraining(unsloth) 使用:
+#   python ModelTraining/cli.py train --config pipeline/configs/train.gemma-vision.yaml
+# 先 --dry-run 预演解析后的配置。
+#
+# 目标: 用私有知识库(阶段0合成的 JSONL)微调 Gemma 视觉模型，
+# 让其在窄领域(含看原理图/PCB)超过通用旗舰。个人笔记本可跑(4bit + LoRA)。
+
+# 基座: Gemma 视觉指令模型的 unsloth 4bit 版(按显存换 2b/4b/... 规格)
+model: unsloth/gemma-3-4b-it-unsloth-bnb-4bit
+
+data:
+  # 阶段0 datagen 产出的 JSONL(chatml)。可给多个文件。
+  local_dataset:
+    - pipeline/out/train.jsonl
+  format_type: chatml
+
+training:
+  training_type: lora
+  load_in_4bit: true            # 笔记本友好
+  max_seq_length: 2048
+  num_epochs: 3
+  learning_rate: 0.0002
+  batch_size: 1                 # 显存紧张时保持 1
+  gradient_accumulation_steps: 8
+  gradient_checkpointing: unsloth
+  output_dir: ./pipeline/out/adapter
+  random_seed: 3407
+
+lora:
+  lora_r: 16
+  lora_alpha: 16
+  lora_dropout: 0.0
+  # 关键: 同时微调视觉层与语言层，才能学会"看图判断"
+  finetune_vision_layers: true
+  finetune_language_layers: true
+  finetune_attention_modules: true
+  finetune_mlp_modules: true
+
+logging:
+  enable_tensorboard: true
+  tensorboard_dir: ./pipeline/out/runs

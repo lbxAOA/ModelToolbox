@@ -1,0 +1,47 @@
+% IEEE 会议/期刊论文骨架（需 IEEEtran.cls：latexmk -pdf main.tex）
+\documentclass[conference]{IEEEtran}   % 期刊用 [journal]
+\usepackage{cite}
+\usepackage{amsmath, amssymb}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{hyperref}
+
+\begin{document}
+
+\title{Paper Title}
+\author{\IEEEauthorblockN{Author Name}
+\IEEEauthorblockA{Department, Institution\\
+Email: name@example.com}}
+
+\maketitle
+
+\begin{abstract}
+Problem + method + key results (with numbers) + significance, in 150--250 words.
+\end{abstract}
+
+\begin{IEEEkeywords}
+keyword1, keyword2, keyword3
+\end{IEEEkeywords}
+
+\section{Introduction}
+Motivation, gap, contributions (bullet the contributions).
+
+\section{Related Work}
+
+\section{Method}
+\begin{equation} y = f(x;\theta) \end{equation}
+
+\section{Experiments}
+\subsection{Setup}
+\subsection{Results}
+% \begin{figure}[t]\centering\includegraphics[width=\columnwidth]{figure.pdf}
+% \caption{Caption.}\label{fig:1}\end{figure}
+
+\section{Discussion}
+
+\section{Conclusion}
+
+\bibliographystyle{IEEEtran}
+\bibliography{refs}
+
+\end{document}

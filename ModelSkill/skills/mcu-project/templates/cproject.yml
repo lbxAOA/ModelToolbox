@@ -1,0 +1,25 @@
+# CMSIS-Solution 工程（*.cproject.yml）—— 组件、源文件、（可选）RTOS 层
+project:
+  packs:
+    - pack: ARM::CMSIS
+    # - pack: Keil::STM32F4xx_DFP
+
+  components:
+    - component: CMSIS:CORE
+    - component: Device:Startup        # 启动文件 + 系统初始化
+    # - component: CMSIS Driver:USART   # 需要 CMSIS-Driver 时打开
+    # - component: CMSIS:RTOS2:Keil RTX5 # RTX5（见 mcu-rtos）
+
+  add-path:
+    - ./inc
+
+  groups:
+    - group: App
+      files:
+        - file: ./src/main.c
+        # - file: ./src/board.c
+
+  # RTOS 或板级抽象可拆成层，便于复用：
+  # layers:
+  #   - layer: ./rtos.clayer.yml
+  #   - layer: ./board.clayer.yml

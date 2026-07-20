@@ -1,0 +1,98 @@
+# ─────────────────────────────────────────────────────────────
+# ModelToolbox root .gitignore
+# ─────────────────────────────────────────────────────────────
+
+# ── Python ──────────────────────────────────────────────────
+.venv/
+venv/
+env/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.ipynb_checkpoints/
+*.so
+
+# ── Node / JS ───────────────────────────────────────────────
+node_modules/
+dist/
+build/
+.next/
+out/
+.turbo/
+*.tsbuildinfo
+
+# ── Secrets / local config ──────────────────────────────────
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+secrets.json
+
+# ── Model weights & artifacts (never commit) ────────────────
+*.gguf
+*.safetensors
+*.bin
+*.pt
+*.pth
+*.onnx
+*.ckpt
+*.lora
+mmproj*.gguf
+checkpoints/
+outputs/
+runs/
+wandb/
+
+# ── Raw source documents (ModelIngest keeps originals LOCAL) ─
+# Only converted *.md are committed; originals stay on disk.
+*.pdf
+*.doc
+*.docx
+*.xls
+*.xlsx
+*.ppt
+*.pptx
+# Extracted page-images / figures produced by ModelIngest
+**/assets/ingest/
+**/_ingest_originals/
+
+# ── Vector DB / RAG index (rebuildable, not source) ─────────
+*.chroma/
+chroma/
+*.lance/
+lancedb/
+*.faiss
+*.duckdb
+.rag_index/
+.rag/
+*.sqlite
+*.sqlite3
+
+# ── ModelIngest incremental manifest cache ──────────────────
+.ingest_cache/
+ingest_manifest.sqlite
+.distill_cache/
+
+# ── Local-only commit/push helper scripts (never publish) ───
+push-to-main.ps1
+
+# ── OS / editor ─────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.iml
+*.swp
+*.swo
+*~
+
+# ── Logs / temp ─────────────────────────────────────────────
+*.log
+logs/
+tmp/
+.cache/

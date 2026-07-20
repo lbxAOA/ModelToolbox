@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "modeltoolbox-pipeline"
+version = "0.1.0"
+description = "ModelToolbox 四阶段管线：数据合成→视觉微调→Ollama承载→双通道"
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+authors = [{ name = "lbxAOA" }]
+dependencies = []
+
+[project.optional-dependencies]
+provider = ["modelprovider"]
+dev = ["pytest>=7"]
+
+[project.scripts]
+pipeline = "pipeline_mt.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["pipeline_mt*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
