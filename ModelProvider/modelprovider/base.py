@@ -45,4 +45,8 @@ def build(config: ResolvedConfig) -> Provider:
         from .providers.gemini import GeminiProvider
 
         return GeminiProvider(config)
+    if kind == "cli_agent":
+        from .providers.cli_agent import CLIAgentProvider
+
+        return CLIAgentProvider(config)
     raise ValueError(f"未支持的 provider kind: {kind!r}")

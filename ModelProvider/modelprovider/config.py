@@ -48,12 +48,17 @@ class ProviderSpec:
     """一个 provider 的静态规格。"""
 
     name: str
-    kind: str  # "openai_compat" | "anthropic" | "gemini"
-    key_env: str  # 存放 API key 的环境变量名
-    base_env: str  # 覆盖 base_url 的环境变量名
-    default_base: str
+    kind: str  # "openai_compat" | "anthropic" | "gemini" | "cli_agent"
+    key_env: str  # 存放 API key 的环境变量名（"" 表示该 provider 不需要 key）
+    base_env: str  # 覆盖 base_url 的环境变量名；cli_agent 场景下复用为"覆盖可执行文件路径"
+    default_base: str  # cli_agent 场景下复用为"默认可执行文件名"（须在 PATH 中）
     default_model: str
     requires_key: bool = True
+    # -- 以下两个字段仅 kind="cli_agent" 使用 --
+    # 调用命令行模板，token 里的 {bin}/{prompt}/{model} 会被实际值替换。
+    cli_argv: tuple[str, ...] | None = None
+    # 允许整体覆盖命令行模板的环境变量名（应对不同版本 CLI 的参数差异）。
+    cli_argv_env: str | None = None
 
 
 # 内置 provider 规格。OpenAI / DeepSeek / Ollama 共用 OpenAI 兼容协议。
@@ -98,6 +103,28 @@ SPECS: dict[str, ProviderSpec] = {
         default_base="http://localhost:11434/v1",
         default_model="llama3.1",
         requires_key=False,
+    ),
+    "claude_code": ProviderSpec(
+        name="claude_code",
+        kind="cli_agent",
+        key_env="",  # 无需 API key：复用终端里已登录的 Claude Code CLI 会话/订阅
+        base_env="CLAUDE_CODE_BIN",  # 覆盖可执行文件路径（默认从 PATH 找 "claude"）
+        default_base="claude",
+        default_model="",  # 空 = 不传 --model，使用 CLI 当前登录计划的默认模型
+        requires_key=False,
+        cli_argv=("{bin}", "-p", "{prompt}"),
+        cli_argv_env="MODELTOOLBOX_CLAUDE_CODE_CMD",
+    ),
+    "codex": ProviderSpec(
+        name="codex",
+        kind="cli_agent",
+        key_env="",  # 无需 API key：复用终端里已登录的 Codex CLI 会话/订阅
+        base_env="CODEX_CLI_BIN",  # 覆盖可执行文件路径（默认从 PATH 找 "codex"）
+        default_base="codex",
+        default_model="",
+        requires_key=False,
+        cli_argv=("{bin}", "exec", "{prompt}"),
+        cli_argv_env="MODELTOOLBOX_CODEX_CMD",
     ),
 }
 
