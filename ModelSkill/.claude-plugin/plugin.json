@@ -1,0 +1,21 @@
+{
+  "name": "skill-manager",
+  "version": "0.1.0",
+  "description": "Auto-discovering Claude Code skill manager. Maintains a searchable registry of every skill under skills/, automatically searches it on each task via a UserPromptSubmit hook and injects the best-matching skill as context, and provides /skill-search, /skill-list, /skill-sync, and /skill-new for managing and scaffolding skills. Structure modeled on AgriciDaniel/claude-obsidian; all tooling is pure-Python and cross-platform (Windows/macOS/Linux).",
+  "author": {
+    "name": "lbxAOA",
+    "url": "https://github.com/lbxAOA/ModelToolbox"
+  },
+  "license": "MIT",
+  "keywords": [
+    "claude-code",
+    "skills",
+    "skill-manager",
+    "registry",
+    "router",
+    "auto-discovery",
+    "orchestrator",
+    "hooks",
+    "plugin"
+  ]
+}

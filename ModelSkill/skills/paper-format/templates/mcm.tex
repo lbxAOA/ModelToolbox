@@ -1,0 +1,69 @@
+% MCM/ICM 美赛论文骨架（英文，pdflatex/latexmk -pdf main.tex）
+\documentclass[12pt]{article}
+\usepackage{geometry}
+\geometry{a4paper, margin=1in}
+\usepackage{amsmath, amssymb}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{caption}
+\usepackage{float}
+\usepackage[numbers,sort&compress]{natbib}
+\usepackage{fancyhdr}
+\usepackage{hyperref}
+
+\pagestyle{fancy}
+\fancyhf{}
+\rhead{Team \# 0000000}
+\lhead{}
+\cfoot{\thepage}
+
+\begin{document}
+
+% ===== Summary Sheet（单独一页，强调创新与结果） =====
+\begin{center}\Large\textbf{Summary}\end{center}
+\thispagestyle{fancy}
+\noindent We address \dots. Our approach \dots (state the novelty up front).
+We develop \dots\ model, solved via \dots. Results show \dots (key numbers).
+Sensitivity analysis indicates \dots. The strengths of our model are \dots.
+
+\vspace{1em}
+\noindent\textbf{Keywords:} keyword1; keyword2; keyword3
+\newpage
+
+\tableofcontents
+\newpage
+
+\section{Introduction}
+\subsection{Background}
+\subsection{Restatement of the Problem}
+\subsection{Our Work}
+
+\section{Assumptions and Justifications}
+\begin{itemize}
+  \item \textbf{Assumption.} \dots\ \emph{Justification:} \dots
+\end{itemize}
+
+\section{Notations}
+\begin{table}[H]\centering
+\begin{tabular}{cl}
+\toprule Symbol & Description \\ \midrule
+$x$ & \dots \\ \bottomrule
+\end{tabular}
+\end{table}
+
+\section{Model Establishment and Solution}
+\begin{equation} \min\ f(x)\ \text{s.t.}\ g(x)\le 0 \end{equation}
+
+\section{Sensitivity Analysis}
+
+\section{Strengths and Weaknesses}
+\subsection{Strengths}
+\subsection{Weaknesses}
+
+\bibliographystyle{plainnat}
+\bibliography{refs}
+
+\appendix
+\section{Code}
+
+\end{document}

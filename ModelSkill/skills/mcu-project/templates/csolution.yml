@@ -1,0 +1,26 @@
+# CMSIS-Solution 顶层（*.csolution.yml）—— 填 device / packs / contexts
+solution:
+  created-for: cmsis-toolbox@2.0.0
+  cdefault:
+
+  # 编译器：AC6 = Arm Compiler for Embedded；也可 GCC / CLANG
+  compiler: AC6
+
+  packs:
+    - pack: ARM::CMSIS                 # CMSIS core
+    # - pack: Keil::STM32F4xx_DFP      # 器件支持包（按 MCU 选）
+
+  target-types:
+    - type: STM32F407                  # 目标名（自定义）
+      device: STMicroelectronics::STM32F407VGTx   # 改成你的 MCU
+
+  build-types:
+    - type: Debug
+      debug: on
+      optimize: debug
+    - type: Release
+      debug: off
+      optimize: balanced
+
+  projects:
+    - project: ./MyApp.cproject.yml

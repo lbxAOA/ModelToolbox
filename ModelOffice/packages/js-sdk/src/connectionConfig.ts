@@ -1,0 +1,498 @@
+import { Logger } from './logs'
+import { getEnvVar, version } from './api/metadata'
+import { runtime } from './utils'
+
+// Remove once all deployments support sandbox subdomains
+const supportedDomains = ['e2b.app', 'e2b.dev', 'e2b.pro', 'e2b-staging.dev']
+
+export const REQUEST_TIMEOUT_MS = 60_000 // 60 seconds
+export const DEFAULT_SANDBOX_TIMEOUT_MS = 300_000 // 300 seconds
+export const KEEPALIVE_PING_INTERVAL_SEC = 50 // 50 seconds
+
+export const KEEPALIVE_PING_HEADER = 'Keepalive-Ping-Interval'
+
+/**
+ * Connection options for requests to the API.
+ */
+export interface ConnectionOpts {
+  /**
+   * E2B API key to use for authentication.
+   *
+   * @default E2B_API_KEY // environment variable
+   */
+  apiKey?: string
+  /**
+   * Whether to validate the format of the E2B API key on the client side.
+   * Disable this when your deployment issues API keys that don't match the
+   * default `e2b_` format.
+   *
+   * @default E2B_VALIDATE_API_KEY // environment variable or `true`
+   */
+  validateApiKey?: boolean
+  /**
+   * E2B access token to use for authentication.
+   *
+   * @deprecated Pass the token through `apiHeaders` instead, e.g.
+   * `apiHeaders: { Authorization: \`Bearer ${token}\` }`.
+   *
+   * @default E2B_ACCESS_TOKEN // environment variable
+   */
+  accessToken?: string
+  /**
+   * Domain to use for the API.
+   *
+   * @default E2B_DOMAIN // environment variable or `e2b.app`
+   */
+  domain?: string
+  /**
+   * API Url to use for the API.
+   * @internal
+   * @default E2B_API_URL // environment variable or `https://api.${domain}`
+   */
+  apiUrl?: string
+  /**
+   * Sandbox Url to use for the API.
+   * @internal
+   * @default E2B_SANDBOX_URL // environment variable, `https://sandbox.${domain}`
+   */
+  sandboxUrl?: string
+  /**
+   * If true the SDK starts in the debug mode and connects to the local envd API server.
+   * @internal
+   * @default E2B_DEBUG // environment variable or `false`
+   */
+  debug?: boolean
+  /**
+   * Timeout for requests to the API in **milliseconds**.
+   *
+   * @default 60_000 // 60 seconds
+   */
+  requestTimeoutMs?: number
+  /**
+   * Logger to use for logging messages. It can accept any object that implements `Logger` interface—for example, {@link console}.
+   */
+  logger?: Logger
+
+  /**
+   * Additional headers to send with the request.
+   *
+   * @deprecated Use `apiHeaders` instead.
+   */
+  headers?: Record<string, string>
+
+  /**
+   * Proxy URL to use for requests. In case of a sandbox it applies to all
+   * requests made to the returned sandbox.
+   *
+   * @example 'http://user:pass@127.0.0.1:8080'
+   */
+  proxy?: string
+
+  /**
+   * Additional headers to send with E2B API requests.
+   */
+  apiHeaders?: Record<string, string>
+
+  /**
+   * An optional `AbortSignal` that can be used to cancel the in-flight request.
+   * When the signal is aborted, the underlying `fetch` is aborted and the
+   * returned promise rejects with an `AbortError`.
+   */
+  signal?: AbortSignal
+}
+
+/**
+ * Options accepted by `ConnectionConfig`.
+ *
+ * @deprecated Use `ConnectionOpts` instead.
+ */
+export type ConnectionConfigOpts = ConnectionOpts
+
+/**
+ * Build an `AbortSignal` that combines an optional request-timeout signal
+ * (via `AbortSignal.timeout`) with an optional user-provided signal.
+ *
+ * Returns `undefined` when neither input would produce a signal.
+ *
+ * @internal
+ */
+export function buildRequestSignal(
+  requestTimeoutMs: number | undefined,
+  userSignal: AbortSignal | undefined
+): AbortSignal | undefined {
+  // `0` (and `undefined`) disable the request timeout.
+  const timeoutSignal = requestTimeoutMs
+    ? AbortSignal.timeout(requestTimeoutMs)
+    : undefined
+
+  if (timeoutSignal && userSignal) {
+    return AbortSignal.any([timeoutSignal, userSignal])
+  }
+
+  return timeoutSignal ?? userSignal
+}
+
+/**
+ * Set up an internal `AbortController` for a streaming request.
+ *
+ * Until `clearStartTimeout` is called, the controller aborts when either
+ *  - the optional user signal aborts, or
+ *  - the optional request timeout elapses (used to bound the initial
+ *    handshake; long-lived streams should call `clearStartTimeout` once
+ *    the handshake succeeds).
+ *
+ * The user-signal listener stays attached for the full stream lifetime
+ * so the caller can cancel a long-running stream by aborting the signal.
+ *
+ * `cleanup` is idempotent and detaches the listener, clears the handshake
+ * timer (if still pending), and aborts the controller. Call it when the
+ * stream finishes or when startup fails.
+ *
+ * @internal
+ */
+export function setupRequestController(
+  requestTimeoutMs: number | undefined,
+  userSignal: AbortSignal | undefined
+): {
+  controller: AbortController
+  clearStartTimeout: () => void
+  cleanup: () => void
+} {
+  const controller = new AbortController()
+
+  const onUserAbort = () => controller.abort(userSignal?.reason)
+  if (userSignal) {
+    if (userSignal.aborted) {
+      controller.abort(userSignal.reason)
+    } else {
+      userSignal.addEventListener('abort', onUserAbort, { once: true })
+    }
+  }
+
+  let reqTimeout: ReturnType<typeof setTimeout> | undefined = requestTimeoutMs
+    ? setTimeout(
+        () =>
+          controller.abort(
+            new DOMException(
+              `Request handshake timed out after ${requestTimeoutMs}ms`,
+              'TimeoutError'
+            )
+          ),
+        requestTimeoutMs
+      )
+    : undefined
+
+  const clearStartTimeout = () => {
+    if (reqTimeout) {
+      clearTimeout(reqTimeout)
+      reqTimeout = undefined
+    }
+  }
+
+  let cleaned = false
+  const cleanup = () => {
+    if (cleaned) return
+    cleaned = true
+    userSignal?.removeEventListener('abort', onUserAbort)
+    clearStartTimeout()
+    controller.abort()
+  }
+
+  return { controller, clearStartTimeout, cleanup }
+}
+
+/**
+ * Create a resettable idle-timeout that aborts `controller` when no progress is
+ * made within `idleTimeoutMs`. `arm` (re)starts the timer; call it on each
+ * chunk. `clear` stops it. `0`/`undefined` disables it (both are no-ops).
+ *
+ * @internal
+ */
+function createIdleAbort(
+  controller: AbortController,
+  idleTimeoutMs: number | undefined,
+  label: string
+): { arm: () => void; clear: () => void } {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const clear = () => {
+    if (timer) {
+      clearTimeout(timer)
+      timer = undefined
+    }
+  }
+  const arm = () => {
+    if (!idleTimeoutMs) return
+    clear()
+    timer = setTimeout(
+      () =>
+        controller.abort(
+          new DOMException(
+            `${label} idle for ${idleTimeoutMs}ms`,
+            'TimeoutError'
+          )
+        ),
+      idleTimeoutMs
+    )
+  }
+  return { arm, clear }
+}
+
+/**
+ * Wrap a streaming response body so its pooled connection is released when the
+ * stream is fully read, cancelled, errors, or stays idle for too long.
+ *
+ * Clears the handshake timeout from {@link setupRequestController} (so
+ * consuming the body isn't killed by it) and replaces it with an idle-read
+ * timeout that bounds only the wire: it's armed while waiting on a network
+ * read and cleared the moment a chunk arrives, so a slow or paused consumer
+ * never trips it (only a server that stops sending mid-stream does). On expiry
+ * it aborts `controller`, tearing down the fetch and releasing the connection.
+ * Pass `0`/`undefined` to disable. Call once the handshake has succeeded.
+ *
+ * @internal
+ */
+export function wrapStreamWithConnectionCleanup(
+  body: ReadableStream<Uint8Array> | null,
+  {
+    clearStartTimeout,
+    cleanup,
+    controller,
+    idleTimeoutMs,
+  }: {
+    clearStartTimeout: () => void
+    cleanup: () => void
+    controller: AbortController
+    idleTimeoutMs?: number
+  }
+): ReadableStream<Uint8Array> {
+  clearStartTimeout()
+
+  if (!body) {
+    cleanup()
+    return new Blob([]).stream()
+  }
+
+  const reader = body.getReader()
+  const idle = createIdleAbort(controller, idleTimeoutMs, 'Stream')
+
+  // Idempotent: safe to call from multiple stream callbacks.
+  const release = () => {
+    idle.clear()
+    cleanup()
+  }
+
+  return new ReadableStream<Uint8Array>({
+    async pull(streamController) {
+      // Bound only the wire: arm before reading from the network and clear the
+      // moment a chunk (or EOF) arrives, so a slow or paused consumer never
+      // counts against the idle timeout. A consumer that holds the stream but
+      // stops reading is never pulled here, so nothing arms—that case is
+      // reclaimed server-side, not by this timer.
+      idle.arm()
+      try {
+        const { done, value } = await reader.read()
+        idle.clear()
+        if (done) {
+          release()
+          streamController.close()
+        } else {
+          streamController.enqueue(value)
+        }
+      } catch (err) {
+        release()
+        streamController.error(err)
+      }
+    },
+    async cancel(reason) {
+      try {
+        await reader.cancel(reason)
+      } finally {
+        release()
+      }
+    },
+  })
+}
+
+/**
+ * Configuration for connecting to the API.
+ */
+export class ConnectionConfig {
+  public static envdPort = 49983
+
+  private static integration?: string
+
+  private static readonly sdkUserAgentPrefix = 'e2b-js-sdk/'
+
+  private static buildUserAgent() {
+    const userAgentParts = [`${ConnectionConfig.sdkUserAgentPrefix}${version}`]
+
+    if (ConnectionConfig.integration) {
+      userAgentParts.push(ConnectionConfig.integration)
+    }
+
+    return userAgentParts.join(' ')
+  }
+
+  /**
+   * Set the `User-Agent` on `headers`: an explicitly provided value always
+   * wins; otherwise the SDK-built one, tagged with the current integration.
+   *
+   * An SDK-built value carried over from an earlier config (configs are
+   * rebuilt via `new ConnectionConfig({ ...config })`) is recognized by its
+   * prefix and rebuilt, so it stays in sync with the current integration.
+   */
+  private static applyUserAgent(headers: Record<string, string>) {
+    const userAgent = headers['User-Agent']
+
+    if (
+      userAgent !== undefined &&
+      !userAgent.startsWith(ConnectionConfig.sdkUserAgentPrefix)
+    ) {
+      return
+    }
+
+    headers['User-Agent'] = ConnectionConfig.buildUserAgent()
+  }
+
+  /**
+   * Identify traffic from an integration wrapping the E2B SDK by appending
+   * `integration` (e.g. `'e2b-code-interpreter/0.1.0'`) to the `User-Agent`
+   * header of every request.
+   *
+   * Call once at startup, before any `ConnectionConfig` is constructed —
+   * configs read the value at construction time. Pass `undefined` to clear.
+   *
+   * @internal
+   * @hidden
+   * @hide
+   */
+  static setIntegration(integration: string | undefined) {
+    ConnectionConfig.integration = integration
+  }
+
+  readonly debug: boolean
+  readonly domain: string
+  readonly apiUrl: string
+  readonly sandboxUrl?: string
+  readonly logger?: Logger
+
+  readonly requestTimeoutMs: number
+
+  readonly apiKey?: string
+  readonly validateApiKey: boolean
+  /**
+   * @deprecated Pass the token through `apiHeaders` instead.
+   */
+  readonly accessToken?: string
+
+  readonly headers?: Record<string, string>
+
+  readonly proxy?: string
+
+  constructor(opts?: ConnectionOpts) {
+    this.apiKey = opts?.apiKey || ConnectionConfig.apiKey
+    this.validateApiKey =
+      opts?.validateApiKey ?? ConnectionConfig.validateApiKey
+    this.debug = opts?.debug ?? ConnectionConfig.debug
+    this.domain = opts?.domain || ConnectionConfig.domain
+    this.accessToken = opts?.accessToken || ConnectionConfig.accessToken
+    this.requestTimeoutMs = opts?.requestTimeoutMs ?? REQUEST_TIMEOUT_MS
+    this.logger = opts?.logger
+    this.headers = { ...(opts?.headers ?? {}), ...(opts?.apiHeaders ?? {}) }
+    ConnectionConfig.applyUserAgent(this.headers)
+    this.proxy = opts?.proxy
+
+    this.apiUrl =
+      opts?.apiUrl ||
+      ConnectionConfig.apiUrl ||
+      (this.debug ? 'http://localhost:3000' : `https://api.${this.domain}`)
+
+    this.sandboxUrl = opts?.sandboxUrl || ConnectionConfig.sandboxUrl
+  }
+
+  private static get domain() {
+    return getEnvVar('E2B_DOMAIN') || 'e2b.app'
+  }
+
+  private static get apiUrl() {
+    return getEnvVar('E2B_API_URL')
+  }
+
+  private static get sandboxUrl() {
+    return getEnvVar('E2B_SANDBOX_URL')
+  }
+
+  private static get debug() {
+    return (getEnvVar('E2B_DEBUG') || 'false').toLowerCase() === 'true'
+  }
+
+  private static get apiKey() {
+    return getEnvVar('E2B_API_KEY')
+  }
+
+  private static get validateApiKey() {
+    return (
+      (getEnvVar('E2B_VALIDATE_API_KEY') || 'true').toLowerCase() !== 'false'
+    )
+  }
+
+  private static get accessToken() {
+    return getEnvVar('E2B_ACCESS_TOKEN')
+  }
+
+  getSignal(requestTimeoutMs?: number, signal?: AbortSignal) {
+    return buildRequestSignal(requestTimeoutMs ?? this.requestTimeoutMs, signal)
+  }
+
+  getSandboxUrl(
+    sandboxId: string,
+    opts: { sandboxDomain: string; envdPort: number }
+  ) {
+    if (this.sandboxUrl) {
+      return this.sandboxUrl
+    }
+
+    if (this.debug) {
+      return `http://${this.getHost(sandboxId, opts.envdPort, opts.sandboxDomain)}`
+    }
+
+    const sandboxDomain = opts.sandboxDomain ?? this.domain
+    // The stable sandbox host is only guaranteed for E2B prod; the various other hosted domains may not serve sandbox.<domain> yet and will follow up once those are updated.
+    // Issue with cors from browser so holding off on using in browser as well.
+    if (runtime !== 'browser' && supportedDomains.includes(sandboxDomain)) {
+      return `https://sandbox.${sandboxDomain}`
+    }
+
+    return `https://${this.getHost(sandboxId, opts.envdPort, sandboxDomain)}`
+  }
+
+  getSandboxDirectUrl(
+    sandboxId: string,
+    opts: { sandboxDomain: string; envdPort: number }
+  ) {
+    if (this.sandboxUrl) {
+      return this.sandboxUrl
+    }
+
+    if (this.debug) {
+      return `http://${this.getHost(sandboxId, opts.envdPort, opts.sandboxDomain)}`
+    }
+
+    return `https://${this.getHost(sandboxId, opts.envdPort, opts.sandboxDomain)}`
+  }
+
+  getHost(sandboxId: string, port: number, sandboxDomain: string) {
+    if (this.debug) {
+      return `localhost:${port}`
+    }
+
+    return `${port}-${sandboxId}.${sandboxDomain ?? this.domain}`
+  }
+}
+
+/**
+ * User used for the operation in the sandbox.
+ */
+
+export const defaultUsername: Username = 'user'
+export type Username = string

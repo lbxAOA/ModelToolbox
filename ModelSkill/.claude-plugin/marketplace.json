@@ -1,0 +1,14 @@
+{
+  "name": "skill-manager-marketplace",
+  "owner": {
+    "name": "lbxAOA",
+    "url": "https://github.com/lbxAOA/ModelToolbox"
+  },
+  "plugins": [
+    {
+      "name": "skill-manager",
+      "source": "./",
+      "description": "Auto-discovering Claude Code skill manager: searchable skill registry, automatic per-task skill matching via a UserPromptSubmit hook, plus /skill-search, /skill-list, /skill-sync, and /skill-new."
+    }
+  ]
+}

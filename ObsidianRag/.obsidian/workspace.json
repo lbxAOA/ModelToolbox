@@ -1,0 +1,223 @@
+{
+  "main": {
+    "id": "a404e6388ffae77c",
+    "type": "split",
+    "children": [
+      {
+        "id": "363bb6580d2b3f41",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "aa144735a0a7adfb",
+            "type": "leaf",
+            "state": {
+              "type": "pdf",
+              "state": {
+                "file": "Deep-Learning/Books/Deep+Learning+Ian+Goodfellow.pdf"
+              },
+              "icon": "lucide-file-text",
+              "title": "Deep+Learning+Ian+Goodfellow"
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "vertical"
+  },
+  "left": {
+    "id": "fdbdf77db4cd699b",
+    "type": "split",
+    "children": [
+      {
+        "id": "2f84e5a1b41dff7d",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "e07a13007cd19202",
+            "type": "leaf",
+            "state": {
+              "type": "file-explorer",
+              "state": {
+                "sortOrder": "alphabetical",
+                "autoReveal": false
+              },
+              "icon": "lucide-folder-closed",
+              "title": "Files"
+            }
+          },
+          {
+            "id": "7cec4e70f330e49d",
+            "type": "leaf",
+            "state": {
+              "type": "search",
+              "state": {
+                "query": "",
+                "matchingCase": false,
+                "explainSearch": false,
+                "collapseAll": false,
+                "extraContext": false,
+                "sortOrder": "alphabetical"
+              },
+              "icon": "lucide-search",
+              "title": "Search"
+            }
+          },
+          {
+            "id": "2e24a1d799994288",
+            "type": "leaf",
+            "state": {
+              "type": "bookmarks",
+              "state": {},
+              "icon": "lucide-bookmark",
+              "title": "Bookmarks"
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "horizontal",
+    "width": 300
+  },
+  "right": {
+    "id": "1259d582440599b6",
+    "type": "split",
+    "children": [
+      {
+        "id": "abf01bf2d41c2ffa",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "00bf14491ee21ad6",
+            "type": "leaf",
+            "state": {
+              "type": "backlink",
+              "state": {
+                "file": "PCB/Knowledge Base/散热设计.md",
+                "collapseAll": false,
+                "extraContext": false,
+                "sortOrder": "alphabetical",
+                "showSearch": false,
+                "searchQuery": "",
+                "backlinkCollapsed": false,
+                "unlinkedCollapsed": true
+              },
+              "icon": "links-coming-in",
+              "title": "Backlinks for 散热设计"
+            }
+          },
+          {
+            "id": "ed501966283aad8d",
+            "type": "leaf",
+            "state": {
+              "type": "outgoing-link",
+              "state": {
+                "file": "Welcome.md",
+                "linksCollapsed": false,
+                "unlinkedCollapsed": true
+              },
+              "icon": "links-going-out",
+              "title": "Outgoing links from Welcome"
+            }
+          },
+          {
+            "id": "93b3236124565682",
+            "type": "leaf",
+            "state": {
+              "type": "tag",
+              "state": {
+                "sortOrder": "frequency",
+                "useHierarchy": true,
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-tags",
+              "title": "Tags"
+            }
+          },
+          {
+            "id": "29c742e96704b32a",
+            "type": "leaf",
+            "state": {
+              "type": "all-properties",
+              "state": {
+                "sortOrder": "frequency",
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-archive",
+              "title": "All properties"
+            }
+          },
+          {
+            "id": "4a39b796e33cae61",
+            "type": "leaf",
+            "state": {
+              "type": "outline",
+              "state": {
+                "file": "Welcome.md",
+                "followCursor": false,
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-list",
+              "title": "Outline of Welcome"
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "horizontal",
+    "width": 300,
+    "collapsed": true
+  },
+  "left-ribbon": {
+    "hiddenItems": {
+      "switcher:Open quick switcher": false,
+      "graph:Open graph view": false,
+      "canvas:Create new canvas": false,
+      "daily-notes:Open today's daily note": false,
+      "templates:Insert template": false,
+      "command-palette:Open command palette": false,
+      "bases:Create new base": false
+    }
+  },
+  "active": "aa144735a0a7adfb",
+  "lastOpenFiles": [
+    "Algorithms/Dynamic Programming/Probability DP.md",
+    "Hardware-PCB/Books/Horowitz.pdf",
+    "ChinesePolitics/Exam/2026.pdf",
+    "ChinesePolitics/Exam/2025.pdf",
+    "ChinesePolitics/Exam/2024.pdf",
+    "ChinesePolitics/Exam/2023.pdf",
+    "ChinesePolitics/Exam/2022.pdf",
+    "ChinesePolitics/Exam/2021.pdf",
+    "ChinesePolitics/Exam/2020.pdf",
+    "ChinesePolitics/Exam/2019.pdf",
+    "ChinesePolitics/Exam/2018.pdf",
+    "CODE/Algorithms/Strings/Strings MOC.md",
+    "CODE/Algorithms/Graph Theory/Boruvka's Algorithm.md",
+    "CODE/Algorithms/Graph Theory/Graph Theory MOC.md",
+    "CODE/Algorithms/Algorithm Fundamentals/Algorithm Fundamentals MOC.md",
+    "CODE/Algorithms/Data Structures/Fenwick Tree.md",
+    "CODE/Algorithms/Algorithms MOC.md",
+    "CODE/Algorithms/Miscellaneous/Two Pointers.md",
+    "CODE/Algorithms/Miscellaneous/Simulated Annealing.md",
+    "CODE/Algorithms/Miscellaneous/Reservoir Sampling.md",
+    "CODE/Algorithms/Miscellaneous/Random Incremental Construction.md",
+    "CODE/Algorithms/Miscellaneous/Parallel Binary Search.md",
+    "CODE/Algorithms/Miscellaneous/Mo's Algorithm.md",
+    "CODE/Algorithms/Miscellaneous/Mo's Algorithm on Trees.md",
+    "CODE/Algorithms/Miscellaneous/Miscellaneous MOC.md",
+    "CODE/Algorithms/Miscellaneous/Meet in the Middle.md",
+    "CODE/Algorithms/Miscellaneous/Josephus Problem.md",
+    "CODE/Algorithms/Miscellaneous/Discretization.md",
+    "CODE/Algorithms/Miscellaneous/Chtholly Tree.md",
+    "CODE/Algorithms/Miscellaneous/CDQ Divide and Conquer.md",
+    "CODE/Algorithms/Search/Search MOC.md",
+    "CODE/Algorithms/Computational Geometry/Sweep Line.md",
+    "CODE/Algorithms/Computational Geometry/Rotating Calipers.md",
+    "CODE/Algorithms/Computational Geometry/Pick's Theorem.md",
+    "CODE/Algorithms/Computational Geometry/Point in Polygon.md",
+    "CODE/Algorithms/Computational Geometry/Line Segment Intersection.md"
+  ]
+}

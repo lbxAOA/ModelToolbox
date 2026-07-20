@@ -1,0 +1,77 @@
+{
+  "$comment": "ModelToolbox 聚合 MCP 配置。把各模块暴露的 MCP server 汇总到一处。已实现的 enabled=true；占位/规划中的 enabled=false 并注明落点。客户端(如 Claude/VSCode)可据此拼装自己的 mcpServers。",
+  "mcpServers": {
+    "altium": {
+      "enabled": true,
+      "module": "ModelMCP/altium-mcp",
+      "command": "python",
+      "args": ["start_server.py"],
+      "cwd": "ModelMCP/altium-mcp",
+      "description": "Altium 原理图/PCB 工具(读取器件、网络、规则)"
+    },
+    "ach-roundtable": {
+      "enabled": true,
+      "module": "ModelMCP/ach-roundtable-mcp",
+      "command": "python",
+      "args": ["server.py"],
+      "cwd": "ModelMCP/ach-roundtable-mcp",
+      "description": "竞争性假设分析多智能体圆桌(本地 Ollama, 无需外部 key)"
+    },
+    "code-review-graph": {
+      "enabled": true,
+      "module": "ModelMemory",
+      "command": "uvx",
+      "args": ["code-review-graph", "serve"],
+      "description": "代码审查记忆图(来自 ModelMemory)"
+    },
+    "obsidian-rag": {
+      "enabled": true,
+      "module": "ModelMCP/obsidian-rag-mcp",
+      "command": "python",
+      "args": ["server.py"],
+      "cwd": "ModelMCP/obsidian-rag-mcp",
+      "description": "索引 ObsidianRag 笔记, 工具 search/get_note/reindex(Ollama nomic-embed-text + sqlite 向量库)。"
+    },
+    "ltspice": {
+      "enabled": true,
+      "module": "ModelMCP/ltspice",
+      "command": "python",
+      "args": ["server.py"],
+      "cwd": "ModelMCP/ltspice",
+      "description": "LTspice 原理图读取(.asc)与仿真: list_schematics/read_schematic/read_parameters/run_simulation。"
+    },
+    "model-serve": {
+      "enabled": false,
+      "module": "ModelTraining",
+      "planned": true,
+      "description": "占位: 包 unsloth_cli 为 MCP(infer/finetune/export/list-models)。AGPL, 仅子进程调用。"
+    },
+    "sandbox": {
+      "enabled": false,
+      "module": "ModelOffice",
+      "planned": true,
+      "description": "占位: 包 e2b python-sdk 为 MCP(run-code/upload/download), 让代码执行走隔离沙箱。"
+    }
+  },
+  "adapters": {
+    "$comment": "非 MCP、但纳入统一编排的能力入口(走 CLI/库调用)。",
+    "provider": {
+      "module": "ModelProvider",
+      "kind": "cli+lib",
+      "entry": "modelprovider",
+      "description": "统一大模型调用层: OpenAI/Anthropic/Gemini/DeepSeek/Ollama; 角色 teacher/fallback/runner。"
+    },
+    "ingest": {
+      "module": "ModelIngest",
+      "kind": "cli+lib",
+      "entry": "modelingest",
+      "description": "文档转 md(PDF/Word/Excel/PPT/图片), 语料预处理入口。"
+    },
+    "pipeline": {
+      "module": "pipeline",
+      "kind": "cli+lib",
+      "entry": "pipeline",
+      "description": "四阶段管线: datagen(阶段0蒸馏)/train(阶段1子进程调unsloth)/serve(阶段2生成Modelfile+ollama create)。"
+    }
+  }
+}

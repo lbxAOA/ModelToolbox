@@ -1,0 +1,72 @@
+% CUMCM 国赛数学建模论文骨架（中文，XeLaTeX 编译：latexmk -xelatex main.tex）
+\documentclass[12pt]{article}
+\usepackage{ctex}                 % 中文支持
+\usepackage{geometry}
+\geometry{a4paper, margin=2.5cm}
+\usepackage{amsmath, amssymb}
+\usepackage{graphicx}
+\usepackage{booktabs}             % 三线表
+\usepackage{caption}
+\usepackage{float}
+\usepackage[numbers,sort&compress]{natbib}
+\usepackage{hyperref}
+
+\title{\textbf{基于……的……模型}}
+\author{}
+\date{}
+
+\begin{document}
+
+% ===== 摘要（评审第一关：方法 + 关键结果 + 结论） =====
+\begin{center}\Large\textbf{摘要}\end{center}
+\noindent 针对问题一，建立了……模型，采用……方法，求得……（关键数据）。
+针对问题二，……。针对问题三，……。本文模型的优点在于……。
+
+\noindent\textbf{关键词：} 关键词1；关键词2；关键词3
+\newpage
+
+\section{问题重述}
+\subsection{问题背景}
+\subsection{问题提出}
+
+\section{问题分析}
+
+\section{模型假设}
+\begin{enumerate}
+  \item 假设……，理由：……。
+  \item 假设……，理由：……。
+\end{enumerate}
+
+\section{符号说明}
+\begin{table}[H]\centering
+\begin{tabular}{cll}
+\toprule
+符号 & 含义 & 单位 \\
+\midrule
+$x$ & …… & …… \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\section{模型的建立与求解}
+\subsection{问题一模型}
+\begin{equation}
+  \min\ f(x)\quad \text{s.t.}\ g(x)\le 0
+\end{equation}
+% \begin{figure}[H]\centering\includegraphics[width=.7\textwidth]{figure.pdf}
+% \caption{结果图}\end{figure}
+
+\section{模型检验与灵敏度分析}
+
+\section{模型评价}
+\subsection{优点}
+\subsection{缺点与改进}
+
+\bibliographystyle{gbt7714-numerical} % 或 plainnat
+\bibliography{refs}
+
+\appendix
+\section{支撑代码}
+% \lstinputlisting{solve.py}
+
+\end{document}
