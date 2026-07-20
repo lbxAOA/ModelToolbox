@@ -1,6 +1,11 @@
 """ModelIngest 命令行入口。
 
-两段式管线：
+两段式管线（外加阶段 A 前置的可选抓取）：
+
+阶段 A 前置 —— crawl（抓取公开网页/文件到本地，产物是原始 .html/.pdf/...）::
+
+    modelingest crawl --url <URL> [--url <URL> ...] --output <原始文档目录> \
+        [--urls-file <文件>] [--depth 0] [--ignore-robots] [--overwrite]
 
 阶段 A —— parse（原始文档 → 干净 md）::
 
@@ -14,6 +19,8 @@
     modelingest distill-link --output <知识库目录>          # 只重跑建链 + MOC
 
 原始文件始终留在 --source，不被移动或上传；转换产物写入 --output（镜像目录结构）。
+crawl 的 --output 通常就指向某个 source_root（或其子目录），抓下来的原始文件随后
+可直接被 `modelingest run` 当作本地文档一样转换。
 """
 
 from __future__ import annotations
@@ -39,6 +46,23 @@ def _add_common(sp: argparse.ArgumentParser) -> None:
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="modelingest", description="原始文档 → Markdown 语料转换器")
     sub = p.add_subparsers(dest="command", required=True)
+
+    # ---- 阶段 A 前置：crawl ----
+    cr_p = sub.add_parser("crawl", help="抓取公开网页/文件到本地（产物随后可用 run 正常转换）")
+    cr_p.add_argument("--url", "-u", action="append", dest="urls", default=[],
+                       help="要抓取的 URL（可重复传入）")
+    cr_p.add_argument("--urls-file", help="URL 列表文件，每行一个（# 开头视为注释）")
+    cr_p.add_argument("--output", "-o", required=True, help="抓取产物输出目录（通常是 source_root 的子目录）")
+    cr_p.add_argument("--manifest", default=".crawl_cache/crawl_manifest.sqlite",
+                       help="crawl 增量 manifest 路径（默认相对 output）")
+    cr_p.add_argument("--depth", type=int, default=0, help="跟随链接抓取的深度（0=只抓给定 URL）")
+    cr_p.add_argument("--allow-cross-domain", action="store_true", help="跟随链接时允许跨域（默认只抓同域）")
+    cr_p.add_argument("--delay", type=float, default=1.0, help="请求间隔秒数（礼貌抓取）")
+    cr_p.add_argument("--timeout", type=float, default=20.0, help="单次请求超时秒数")
+    cr_p.add_argument("--max-pages", type=int, default=200, help="本次运行最多抓取的页面数（安全上限）")
+    cr_p.add_argument("--ignore-robots", action="store_true", help="忽略 robots.txt（默认遵守，谨慎使用）")
+    cr_p.add_argument("--overwrite", action="store_true", help="忽略 manifest，强制重新抓取")
+    cr_p.add_argument("--user-agent", default=None, help="自定义 User-Agent")
 
     run_p = sub.add_parser("run", help="执行转换（增量）")
     _add_common(run_p)
@@ -83,8 +107,47 @@ def _make_cfg(args) -> IngestConfig:
     )
 
 
+def _collect_crawl_urls(args) -> list[str]:
+    urls = list(args.urls or [])
+    if args.urls_file:
+        text = Path(args.urls_file).read_text(encoding="utf-8")
+        urls.extend(
+            line.strip() for line in text.splitlines()
+            if line.strip() and not line.strip().startswith("#")
+        )
+    return urls
+
+
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+
+    if args.command == "crawl":
+        from .crawler import CrawlConfig, DEFAULT_USER_AGENT, crawl as crawl_run
+
+        urls = _collect_crawl_urls(args)
+        if not urls:
+            print("✗ 请通过 --url 或 --urls-file 提供至少一个 URL", file=sys.stderr)
+            return 2
+
+        ccfg = CrawlConfig(
+            urls=urls,
+            output_root=Path(args.output),
+            manifest_path=Path(args.manifest),
+            max_depth=args.depth,
+            same_domain_only=not args.allow_cross_domain,
+            delay=args.delay,
+            timeout=args.timeout,
+            user_agent=args.user_agent or DEFAULT_USER_AGENT,
+            respect_robots=not args.ignore_robots,
+            overwrite=args.overwrite,
+            max_pages=args.max_pages,
+        )
+        summary = crawl_run(ccfg)
+        print(f"✅ 抓取 {summary.fetched} · 跳过 {summary.skipped} · 失败 {summary.failed}")
+        for r in summary.results:
+            if r.status == "failed":
+                print(f"  ✗ {r.url}: {r.error}", file=sys.stderr)
+        return 1 if (summary.failed and not summary.fetched) else 0
 
     if args.command in {"run", "status", "clean"}:
         cfg = _make_cfg(args)

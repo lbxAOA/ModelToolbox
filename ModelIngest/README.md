@@ -2,6 +2,8 @@
 
 原始文档 → **结构化知识库**的两段式管线。
 
+- **阶段 A 前置（crawl，可选）**：抓取公开网页 / 文件到本地，产物是原始 `.html`/`.pdf`/...，
+  与本地文档一视同仁，随后交给 parse 正常转换。
 - **阶段 A（parse）**：把 PDF / Word / Excel / PPT / 图片等统一转成带溯源信息的干净 `.md`，
   **保留本地原件（不上传）**。
 - **阶段 B（distill）**：把干净 md 蒸馏成**结构化原子笔记**（一概念一卡片，固定 schema），
@@ -12,6 +14,17 @@
 - **obsidian-rag-mcp** —— 检索兜底
 
 ## 设计要点
+
+### 阶段 A 前置 —— crawl（可选）
+
+| 维度 | 做法 |
+|------|------|
+| 定位 | 只做「抓取 + 落盘」，不做解析；抓下来的原始文件写入 `--output`（通常是某个 source 目录），随后用 `modelingest run` 像本地文档一样正常转换 |
+| 依赖 | 零运行时依赖，用标准库 `urllib`（与 ModelProvider 的 HTTP 层同一套路），可注入假实现测试 |
+| 礼貌抓取 | 默认遵守 `robots.txt`；请求间有 `--delay` 秒间隔；有 `--max-pages` 安全上限 |
+| 增量 | sqlite manifest 按 URL 记录 etag / last-modified / sha256，未变则跳过（条件请求 304，或内容 hash 兜底）|
+| 浅层深度抓取 | `--depth 0`（默认）只抓给定 URL；`--depth N` 从 HTML 中提取同域 `<a href>` 链接继续抓取（`--allow-cross-domain` 可放开跨域）|
+| 落盘命名 | 按 URL host + path 镜像成相对路径，扩展名按响应 `content-type` 判定（html/pdf/txt/md/csv），回退到 URL 自带后缀 |
 
 ### 阶段 A —— parse
 
@@ -45,6 +58,22 @@ pip install -e ../ModelProvider      # 阶段 B 需要（teacher 角色）
 ```
 
 ## 使用
+
+### 阶段 A 前置 —— crawl（可选）
+
+```bash
+# 抓取单个公开页面，落盘到 source 目录下的 web 子目录
+ modelingest crawl --url https://example.com/article --output ../ObsidianRag/web
+
+# 批量抓取（每行一个 URL 的文件），深度 1 跟随同域链接
+ modelingest crawl --urls-file urls.txt --output ../ObsidianRag/web --depth 1
+
+# 忽略 robots.txt / 强制重抓（谨慎使用）
+ modelingest crawl --url https://example.com/a --output ../ObsidianRag/web --overwrite
+
+# 抓下来的原始文件随后用普通 阶段 A 流程转换成 md
+ modelingest run --source ../ObsidianRag --output ../ObsidianRag_md
+```
 
 ### 阶段 A —— parse
 
@@ -114,8 +143,8 @@ generator: ModelIngest
 
 ## 在 ModelToolbox 中的位置
 
-流水线**最上游**：`ModelIngest(parse → distill) → 数据合成 → ModelTraining → Ollama → 调用`。
+流水线**最上游**：`ModelIngest(crawl → parse → distill) → 数据合成 → ModelTraining → Ollama → 调用`。
 遵循「松耦合」原则，仅通过文件 / CLI 边界与其它模块交互；distill 通过 `import modelprovider`
-调用 teacher（同为 MIT，许可证相容）。
+调用 teacher（同为 MIT，许可证相容）。crawl 阶段不下载任何额外依赖，与 parse/distill 完全解耦。
 
 > 许可证：MIT（ModelToolbox 原创）。依赖的 markitdown / docling / mineru / PyMuPDF 各自适用其许可证。

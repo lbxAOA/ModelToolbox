@@ -142,3 +142,110 @@ def test_missing_key_raises(monkeypatch):
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     with pytest.raises(RuntimeError):
         mp_config.resolve("openai")
+
+
+def test_claude_code_needs_no_key(monkeypatch):
+    # cli_agent provider 不需要 API key，即便完全没设置任何 key 也应能 resolve。
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    cfg = mp_config.resolve("claude_code")
+    assert cfg.spec.kind == "cli_agent"
+    assert cfg.api_key is None
+
+
+def test_claude_code_cli_roundtrip(monkeypatch):
+    from modelprovider.providers import cli_agent as mp_cli_agent
+
+    captured: dict = {}
+
+    class _FakeCompletedProcess:
+        returncode = 0
+        stdout = "hello from claude code\n"
+        stderr = ""
+
+    def fake_run(argv, capture_output, text, timeout):
+        captured["argv"] = argv
+        captured["timeout"] = timeout
+        return _FakeCompletedProcess()
+
+    monkeypatch.setattr(mp_cli_agent.subprocess, "run", fake_run)
+    client = LLMClient.for_provider("claude_code", load_env=False)
+    out = client.ask("你好", system="be terse")
+
+    assert out == "hello from claude code"
+    assert captured["argv"][0] == "claude"
+    assert "-p" in captured["argv"]
+    assert any("你好" in a for a in captured["argv"])
+
+
+def test_codex_cli_uses_own_argv_template(monkeypatch):
+    from modelprovider.providers import cli_agent as mp_cli_agent
+
+    captured: dict = {}
+
+    class _FakeCompletedProcess:
+        returncode = 0
+        stdout = "codex says hi"
+        stderr = ""
+
+    def fake_run(argv, capture_output, text, timeout):
+        captured["argv"] = argv
+        return _FakeCompletedProcess()
+
+    monkeypatch.setattr(mp_cli_agent.subprocess, "run", fake_run)
+    client = LLMClient.for_provider("codex", load_env=False)
+    out = client.ask("q")
+
+    assert out == "codex says hi"
+    assert captured["argv"][:2] == ["codex", "exec"]
+
+
+def test_cli_agent_argv_override_via_env(monkeypatch):
+    from modelprovider.providers import cli_agent as mp_cli_agent
+
+    monkeypatch.setenv("MODELTOOLBOX_CLAUDE_CODE_CMD", "myclaude --print {prompt}")
+    captured: dict = {}
+
+    class _FakeCompletedProcess:
+        returncode = 0
+        stdout = "ok"
+        stderr = ""
+
+    def fake_run(argv, capture_output, text, timeout):
+        captured["argv"] = argv
+        return _FakeCompletedProcess()
+
+    monkeypatch.setattr(mp_cli_agent.subprocess, "run", fake_run)
+    client = LLMClient.for_provider("claude_code", load_env=False)
+    client.ask("hi")
+
+    assert captured["argv"][0] == "myclaude"
+    assert captured["argv"][1] == "--print"
+
+
+def test_cli_agent_nonzero_exit_raises(monkeypatch):
+    from modelprovider.providers import cli_agent as mp_cli_agent
+
+    class _FakeCompletedProcess:
+        returncode = 1
+        stdout = ""
+        stderr = "not logged in"
+
+    monkeypatch.setattr(
+        mp_cli_agent.subprocess, "run",
+        lambda *a, **k: _FakeCompletedProcess(),
+    )
+    client = LLMClient.for_provider("codex", load_env=False)
+    with pytest.raises(mp_cli_agent.CLIAgentError, match="not logged in"):
+        client.ask("hi")
+
+
+def test_cli_agent_missing_binary_raises(monkeypatch):
+    from modelprovider.providers import cli_agent as mp_cli_agent
+
+    def fake_run(*a, **k):
+        raise FileNotFoundError()
+
+    monkeypatch.setattr(mp_cli_agent.subprocess, "run", fake_run)
+    client = LLMClient.for_provider("claude_code", load_env=False)
+    with pytest.raises(mp_cli_agent.CLIAgentError):
+        client.ask("hi")
