@@ -33,11 +33,21 @@ def _is_moc(md_path: Path) -> bool:
     return md_path.stem.endswith(" MOC") or md_path.stem.endswith("MOC")
 
 
+def _is_hidden(md_path: Path, vault: Path) -> bool:
+    """路径中任一层以 ``.`` 开头即视为隐藏（如 ``.ingest_meta`` 存放准则/manifest等元数据），
+    不作为笔记参与建链/MOC——否则 ``rglob`` 会把隐藏目录下的非笔记文件也扫进来。"""
+    try:
+        rel_parts = md_path.relative_to(vault).parts
+    except ValueError:
+        rel_parts = md_path.parts
+    return any(part.startswith(".") for part in rel_parts)
+
+
 def build_title_index(vault: Path) -> dict[str, str]:
     """标题（小写）→ 规范标题。用于把 Related 里的纯文本对齐到真实笔记。"""
     index: dict[str, str] = {}
     for md in vault.rglob("*.md"):
-        if _is_moc(md):
+        if _is_moc(md) or _is_hidden(md, vault):
             continue
         title = _title_of(md)
         index.setdefault(title.lower(), title)
@@ -97,16 +107,16 @@ def build_mocs(
     vault = vault.resolve()
 
     # 收集每个目录下的笔记标题与子目录。
-    for folder in sorted({p.parent for p in vault.rglob("*.md")}):
+    for folder in sorted({p.parent for p in vault.rglob("*.md") if not _is_hidden(p, vault)}):
         notes = sorted(
-            (p for p in folder.glob("*.md") if not _is_moc(p)),
+            (p for p in folder.glob("*.md") if not _is_moc(p) and not _is_hidden(p, vault)),
             key=lambda p: _title_of(p).lower(),
         )
         subdir_mocs = []
         for sub in sorted(folder.iterdir()):
-            if sub.is_dir():
+            if sub.is_dir() and not sub.name.startswith("."):
                 # 子目录若有笔记，则其 MOC 标题为 "<子目录名> MOC"
-                if any(sub.rglob("*.md")):
+                if any(not _is_hidden(p, vault) for p in sub.rglob("*.md")):
                     subdir_mocs.append(f"{sub.name} MOC")
         if not notes and not subdir_mocs:
             continue

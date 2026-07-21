@@ -1,6 +1,6 @@
 """ModelIngest 命令行入口。
 
-两段式管线（外加阶段 A 前置的可选抓取）：
+两段式管线（外加阶段 A 前置的可选抓取、阶段 B 前置的可选知识库准则问答）：
 
 阶段 A 前置 —— discover（只发现分支页面目录，不落盘，供确认后再 crawl）::
 
@@ -18,15 +18,28 @@
     modelingest status --source <...> --output <...>
     modelingest clean  --source <...> --output <...>
 
+阶段 B 前置 —— guideline（通过几个问题了解需求，生成蒸馏时使用的知识库准则）::
+
+    modelingest guideline --output <知识库目录> \
+        [--domain ...] [--audience self_review|rag_retrieval|training_data|mixed] \
+        [--granularity atomic|medium|long_form] [--language zh|en|bilingual] \
+        [--keep-formulas-code true|false] [--extra-notes ...] [--interactive]
+
+    不传任何问题 flag（或加 --interactive）时在终端逐条交互式提问；webui 等程序化
+    调用方应直接传齐 flag。生成的 GUIDELINE.md 写入 <知识库目录>/.ingest_meta/，
+    distill 时自动探测并附加给 teacher（无论 Ollama 还是闭源模型都适用）。
+
 阶段 B —— distill（干净 md → 结构化原子笔记知识库，带 [[wikilink]] + MOC）::
 
-    modelingest distill      --source <md目录> --output <知识库目录> [--profile concept|algorithm]
+    modelingest distill      --source <md目录> --output <知识库目录> [--profile concept|algorithm] \
+        [--guideline <准则文件路径，缺省自动探测 output/.ingest_meta/GUIDELINE.md>]
     modelingest distill-link --output <知识库目录>          # 只重跑建链 + MOC
 
 原始文件始终留在 --source，不被移动或上传；转换产物写入 --output（镜像目录结构）。
 crawl 的 --output 通常就指向某个 source_root（或其子目录），抓下来的原始文件随后
 可直接被 `modelingest run` 当作本地文档一样转换。
 """
+
 
 from __future__ import annotations
 
@@ -115,11 +128,29 @@ def build_parser() -> argparse.ArgumentParser:
                       help="覆盖模型，形如 provider:model（如 deepseek:deepseek-chat）")
     di_p.add_argument("--manifest", default=".distill_cache/distill_manifest.sqlite",
                       help="distill 增量 manifest 路径（默认相对 output）")
+    di_p.add_argument("--guideline", default=None,
+                      help="知识库准则文件路径（默认自动探测 output/.ingest_meta/GUIDELINE.md，"
+                           "由 `modelingest guideline` 生成；不存在则不使用准则）")
     di_p.add_argument("--overwrite", action="store_true", help="忽略 manifest，全量重蒸馏")
     di_p.add_argument("--no-link", action="store_true", help="跳过第二遍建链 + MOC 生成")
 
     dl_p = sub.add_parser("distill-link", help="只重跑第二遍：建 [[wikilink]] + 生成 MOC")
     dl_p.add_argument("--output", "-o", required=True, help="知识库(vault)根目录")
+
+    # ---- 阶段 B 前置：guideline（通过几个问题了解需求，生成蒸馏时使用的准则） ----
+    gl_p = sub.add_parser("guideline", help="生成/更新一份知识库蒸馏准则（GUIDELINE.md）")
+    gl_p.add_argument("--output", "-o", required=True, help="知识库(vault)根目录（准则写入 <output>/.ingest_meta/）")
+    gl_p.add_argument("--domain", default=None, help="领域/用途，如“算法竞赛”“电路板设计”")
+    gl_p.add_argument("--audience", default=None, choices=["self_review", "rag_retrieval", "training_data", "mixed"],
+                      help="主要使用场景")
+    gl_p.add_argument("--granularity", default=None, choices=["atomic", "medium", "long_form"],
+                      help="笔记粒度偏好")
+    gl_p.add_argument("--language", default=None, choices=["zh", "en", "bilingual"], help="笔记语言风格")
+    gl_p.add_argument("--keep-formulas-code", dest="keep_formulas_code", default=None,
+                      choices=["true", "false"], help="是否完整保留原文公式/代码")
+    gl_p.add_argument("--extra-notes", dest="extra_notes", default=None, help="其它特殊要求（可选）")
+    gl_p.add_argument("--interactive", action="store_true",
+                      help="未通过 flag 提供的问题改为在终端交互式询问（webui 不用，人工 CLI 可用）")
 
     # ---- B 部分收尾：为荒馆新蒸馆好的知识库自动生成一个 ModelSkill 技能 ----
     mk_p = sub.add_parser("make-skill", help="为一个知识库自动生成/注册一个检索技能（ModelSkill）")
@@ -286,6 +317,7 @@ def main(argv: list[str] | None = None) -> int:
             manifest_path=Path(args.manifest),
             overwrite=args.overwrite,
             do_link=not args.no_link,
+            guideline_path=Path(args.guideline) if args.guideline else None,
         )
         try:
             s = distill_run(dcfg)
@@ -307,6 +339,32 @@ def main(argv: list[str] | None = None) -> int:
         from .distill import link_only
         stats = link_only(Path(args.output))
         print(f"🔗 建链 {stats['relinked']} 篇 · MOC {stats['mocs']} 个 · 标题索引 {stats['titles']}")
+        return 0
+
+    if args.command == "guideline":
+        from . import guideline as guideline_mod
+
+        flag_answers = {
+            "domain": args.domain,
+            "audience": args.audience,
+            "granularity": args.granularity,
+            "language": args.language,
+            "keep_formulas_code": args.keep_formulas_code,
+            "extra_notes": args.extra_notes,
+        }
+        # 只保留真正传了的 flag；None 表示未传，交给交互/默认值补全。
+        given = {k: v for k, v in flag_answers.items() if v is not None}
+        if args.interactive or not given:
+            answers = guideline_mod.prompt_interactive(given)
+        else:
+            answers = given
+        try:
+            result = guideline_mod.generate_and_save(Path(args.output), answers)
+        except ValueError as exc:
+            print(f"✗ {exc}", file=sys.stderr)
+            return 2
+        print(f"✅ 已生成知识库准则 -> {result.guideline_path}")
+        print("   distill 时会自动探测并遵循此准则（可直接编辑该文件调整规则，无需重新回答问题）。")
         return 0
 
     if args.command == "make-skill":

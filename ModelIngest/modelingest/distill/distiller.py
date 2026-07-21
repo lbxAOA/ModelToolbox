@@ -19,6 +19,7 @@ import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from ..guideline import load_guideline
 from ..manifest import sha256_file
 from . import linker as _linker
 from .chunk import chunk_markdown
@@ -47,6 +48,9 @@ class DistillConfig:
     do_link: bool = True
     min_chars: int = 400
     max_chars: int = 6000
+    # 显式指定知识库准则文件路径；None 时自动探测 vault_root/.ingest_meta/GUIDELINE.md
+    # （见 modelingest.guideline，由 `modelingest guideline` 命令生成）。
+    guideline_path: Path | None = None
 
     def __post_init__(self) -> None:
         self.source_root = Path(self.source_root).resolve()
@@ -54,6 +58,10 @@ class DistillConfig:
         self.manifest_path = Path(self.manifest_path)
         if not self.manifest_path.is_absolute():
             self.manifest_path = (self.vault_root / self.manifest_path).resolve()
+        if self.guideline_path is not None:
+            self.guideline_path = Path(self.guideline_path)
+            if not self.guideline_path.is_absolute():
+                self.guideline_path = (self.vault_root / self.guideline_path).resolve()
 
 
 @dataclass
@@ -94,6 +102,7 @@ def distill_file(
     cfg: DistillConfig,
     profile: Profile,
     teacher: Teacher,
+    guideline_text: str | None = None,
 ) -> tuple[list[Path], list[str]]:
     """蒸馏单个源 md，返回 (写出的笔记路径列表, 错误列表)。"""
     rel = src.relative_to(cfg.source_root)
@@ -109,11 +118,12 @@ def distill_file(
     written: list[Path] = []
     errors: list[str] = []
     seen_titles: set[str] = set()
+    system = build_system(guideline_text)
 
     for ch in chunks:
         prompt = build_prompt(profile, ch.text, doc_title=doc_title)
         try:
-            raw = teacher(prompt, build_system())
+            raw = teacher(prompt, system)
             payload = extract_json(raw)
             notes = validate_notes(payload, profile)
         except (ValueError, NoteValidationError) as exc:
@@ -149,23 +159,30 @@ def run(cfg: DistillConfig) -> DistillSummary:
     profile = get_profile(cfg.profile)
     teacher = build_teacher(role=cfg.role, model=cfg.model)  # 可能抛 TeacherUnavailable
 
+    # 知识库准则（可选）：显式路径优先，否则自动探测 vault_root/.ingest_meta/GUIDELINE.md。
+    # 准则内容变化会体现在 guideline_hash 里，据此触发受影响文件的重新蒸馏。
+    loaded = load_guideline(cfg.vault_root, cfg.guideline_path)
+    guideline_text, guideline_hash = loaded if loaded else (None, "")
+
     manifest = DistillManifest(cfg.manifest_path)
     summary = DistillSummary()
     try:
         for src in _iter_md(cfg.source_root):
             rel = src.relative_to(cfg.source_root).as_posix()
             digest = sha256_file(src)
-            if not cfg.overwrite and not manifest.needs_distill(rel, digest, cfg.profile):
+            if not cfg.overwrite and not manifest.needs_distill(
+                rel, digest, cfg.profile, guideline_hash
+            ):
                 summary.skipped += 1
                 continue
 
-            written, errors = distill_file(src, cfg, profile, teacher)
+            written, errors = distill_file(src, cfg, profile, teacher, guideline_text)
             summary.errors.extend(errors)
             if written:
                 summary.distilled += 1
                 summary.notes += len(written)
                 rels = [p.relative_to(cfg.vault_root).as_posix() for p in written]
-                manifest.record(rel, digest, cfg.profile, rels)
+                manifest.record(rel, digest, cfg.profile, rels, guideline_hash)
             else:
                 summary.failed += 1
     finally:

@@ -14,11 +14,12 @@ from pathlib import Path
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS distilled (
-    rel_path     TEXT PRIMARY KEY,
-    sha256       TEXT NOT NULL,
-    profile      TEXT NOT NULL,
-    outputs      TEXT NOT NULL,      -- JSON 数组：产出笔记的相对路径
-    distilled_at TEXT NOT NULL
+    rel_path       TEXT PRIMARY KEY,
+    sha256         TEXT NOT NULL,
+    profile        TEXT NOT NULL,
+    outputs        TEXT NOT NULL,      -- JSON 数组：产出笔记的相对路径
+    distilled_at   TEXT NOT NULL,
+    guideline_hash TEXT
 );
 """
 
@@ -30,28 +31,47 @@ class DistillManifest:
         self._conn = sqlite3.connect(str(self.db_path))
         with closing(self._conn.cursor()) as cur:
             cur.executescript(_SCHEMA)
+            # 旧库迁移：早期版本没有 guideline_hash 列。
+            cur.execute("PRAGMA table_info(distilled)")
+            cols = {row[1] for row in cur.fetchall()}
+            if "guideline_hash" not in cols:
+                cur.execute("ALTER TABLE distilled ADD COLUMN guideline_hash TEXT")
         self._conn.commit()
 
-    def needs_distill(self, rel_path: str, sha256: str, profile: str) -> bool:
+    def needs_distill(
+        self, rel_path: str, sha256: str, profile: str, guideline_hash: str = ""
+    ) -> bool:
         with closing(self._conn.cursor()) as cur:
             cur.execute(
-                "SELECT sha256, profile FROM distilled WHERE rel_path = ?",
+                "SELECT sha256, profile, guideline_hash FROM distilled WHERE rel_path = ?",
                 (rel_path,),
             )
             row = cur.fetchone()
-        return row is None or row[0] != sha256 or row[1] != profile
+        if row is None:
+            return True
+        prev_guideline = row[2] or ""
+        return row[0] != sha256 or row[1] != profile or prev_guideline != guideline_hash
 
-    def record(self, rel_path: str, sha256: str, profile: str, outputs: list[str]) -> None:
+    def record(
+        self,
+        rel_path: str,
+        sha256: str,
+        profile: str,
+        outputs: list[str],
+        guideline_hash: str = "",
+    ) -> None:
         with closing(self._conn.cursor()) as cur:
             cur.execute(
                 "INSERT OR REPLACE INTO distilled "
-                "(rel_path, sha256, profile, outputs, distilled_at) VALUES (?, ?, ?, ?, ?)",
+                "(rel_path, sha256, profile, outputs, distilled_at, guideline_hash) "
+                "VALUES (?, ?, ?, ?, ?, ?)",
                 (
                     rel_path,
                     sha256,
                     profile,
                     json.dumps(outputs, ensure_ascii=False),
                     datetime.now(timezone.utc).isoformat(),
+                    guideline_hash,
                 ),
             )
         self._conn.commit()

@@ -129,5 +129,11 @@ def extract_json(text: str) -> Any:
     raise ValueError("无法从响应中解析出 JSON")
 
 
-def build_system() -> str:
-    return _SYSTEM
+def build_system(guideline: str | None = None) -> str:
+    """系统提示词；若提供了知识库准则（见 :mod:`modelingest.guideline`），附加在后面。
+
+    准则的优先级高于 profile 默认写作指引（由准则文本自身声明），模型需同时遵守两者。
+    """
+    if not guideline or not guideline.strip():
+        return _SYSTEM
+    return f"{_SYSTEM}\n\n此外，请严格遵守以下用户指定的知识库准则：\n{guideline.strip()}"
