@@ -46,8 +46,13 @@ def _iter_source_files(cfg: IngestConfig):
         if path.suffix.lower() not in cfg.exts:
             continue
         # 跳过 markdown 自身（已经是目标格式）与隐藏目录
-        if any(part.startswith(".") for part in path.relative_to(cfg.source_root).parts):
+        rel_parts = path.relative_to(cfg.source_root).parts
+        if any(part.startswith(".") for part in rel_parts):
             continue
+        if cfg.include is not None:
+            rel = path.relative_to(cfg.source_root).as_posix()
+            if rel not in cfg.include:
+                continue
         yield path
 
 
@@ -156,6 +161,39 @@ def run(cfg: IngestConfig) -> RunSummary:
         manifest.close()
 
     return summary
+
+
+@dataclass
+class ScanEntry:
+    rel_path: str
+    ext: str
+    size: int
+    status: str  # "new" | "changed" | "unchanged"
+
+
+def scan(cfg: IngestConfig) -> list[ScanEntry]:
+    """列出 source_root 下会被 run 处理的文件清单，不做任何转换/落盘。
+
+    供前端"先展现目录确认再填充 md"的预览步骤使用：与 run() 共用同一套
+    扩展名/隐藏目录过滤规则，保证预览结果与实际转换范围一致。
+    """
+    manifest = Manifest(cfg.manifest_path)
+    try:
+        recorded = {r[0]: r[1] for r in manifest.all_records()}
+        entries: list[ScanEntry] = []
+        for src in _iter_source_files(cfg):
+            rel = src.relative_to(cfg.source_root).as_posix()
+            digest = sha256_file(src)
+            if rel not in recorded:
+                file_status = "new"
+            elif recorded[rel] != digest:
+                file_status = "changed"
+            else:
+                file_status = "unchanged"
+            entries.append(ScanEntry(rel, src.suffix.lower(), src.stat().st_size, file_status))
+        return entries
+    finally:
+        manifest.close()
 
 
 def status(cfg: IngestConfig) -> dict:

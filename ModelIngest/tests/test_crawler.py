@@ -107,6 +107,82 @@ def test_crawl_follows_same_domain_links_within_depth(tmp_path: Path, monkeypatc
     assert external not in fetched_urls
 
 
+def test_crawl_follows_unquoted_href_links(tmp_path: Path, monkeypatch):
+    """回归测试：部分站点（如 oi-wiki.org，mkdocs-material 压缩输出）用不带引号的
+    HTML5 属性写法（``href=dp/``），旧正则只认引号包裹的 href 会漏掉真实导航链接。"""
+    start = "https://example.com/"
+    linked = "https://example.com/dp/"
+    pages = {
+        start: FetchResponse(
+            status=200,
+            body=b'<html><a class=md-tabs__link href=dp/>dp</a></html>',
+            headers={"content-type": "text/html"},
+        ),
+        linked: FetchResponse(status=200, body=b"<html>dp page</html>", headers={"content-type": "text/html"}),
+    }
+    monkeypatch.setattr(crawler, "FETCH", _fake_fetch(pages))
+
+    out = tmp_path / "out"
+    cfg = CrawlConfig(urls=[start], output_root=out, max_depth=1, same_domain_only=True, delay=0)
+    summary = crawl(cfg)
+
+    fetched_urls = {r.url for r in summary.results if r.status == "fetched"}
+    assert start in fetched_urls
+    assert linked in fetched_urls
+
+
+def test_discover_collects_titles_without_writing_files(tmp_path: Path, monkeypatch):
+    start = "https://example.com/index.html"
+    linked = "https://example.com/page2.html"
+    external = "https://other.com/page.html"
+    pages = {
+        start: crawler.FetchResponse(
+            status=200,
+            body=(
+                b'<html><head><title>Home</title></head><body>'
+                b'<a href="/page2.html">p2</a>'
+                b'<a href="https://other.com/page.html">ext</a></body></html>'
+            ),
+            headers={"content-type": "text/html"},
+        ),
+        linked: crawler.FetchResponse(
+            status=200,
+            body=b"<html><head><title>Page 2</title></head></html>",
+            headers={"content-type": "text/html"},
+        ),
+        external: crawler.FetchResponse(status=200, body=b"<html>external</html>", headers={"content-type": "text/html"}),
+    }
+    monkeypatch.setattr(crawler, "FETCH", _fake_fetch(pages))
+
+    cfg = crawler.DiscoverConfig(urls=[start], max_depth=1, same_domain_only=True, delay=0)
+    result = crawler.discover(cfg)
+
+    assert result.total == 2
+    assert result.ok == 2
+    assert result.failed == 0
+    titles = {e.url: e.title for e in result.entries}
+    assert titles[start] == "Home"
+    assert titles[linked] == "Page 2"
+    depths = {e.url: e.depth for e in result.entries}
+    assert depths[start] == 0
+    assert depths[linked] == 1
+    # 不落盘、不建 manifest：只是发现目录，不产生任何文件系统副作用。
+    assert not (tmp_path / "example.com").exists()
+
+
+def test_discover_reports_failed_urls(tmp_path: Path, monkeypatch):
+    url = "https://example.com/missing.html"
+    monkeypatch.setattr(crawler, "FETCH", _fake_fetch({}))
+
+    cfg = crawler.DiscoverConfig(urls=[url], delay=0)
+    result = crawler.discover(cfg)
+
+    assert result.total == 1
+    assert result.ok == 0
+    assert result.failed == 1
+    assert result.entries[0].status == "failed"
+
+
 def test_crawl_respects_robots_disallow(tmp_path: Path, monkeypatch):
     url = "https://example.com/secret.html"
     robots_url = "https://example.com/robots.txt"

@@ -38,15 +38,41 @@ function reqEnum(value, allowed, label) {
  * 并拼出 argv 数组，spawn 时不经过 shell，从根源上避免 shell 注入）。
  */
 export const ACTIONS = {
+  "ingest.discover": {
+    module: "model-ingest",
+    label: "发现分支页面（discover）",
+    cwd: "ModelIngest",
+    command: "modelingest",
+    build(p) {
+      const url = reqUrl(p.url);
+      const args = ["discover", "--url", url];
+      const depth = Math.max(0, Math.min(5, Number(p.depth) || 1));
+      args.push("--depth", String(depth));
+      const maxPages = Math.max(1, Math.min(500, Number(p.maxPages) || 100));
+      args.push("--max-pages", String(maxPages));
+      if (p.allowCrossDomain) args.push("--allow-cross-domain");
+      if (p.ignoreRobots) args.push("--ignore-robots");
+      return args;
+    },
+  },
   "ingest.crawl": {
     module: "model-ingest",
     label: "抓取网页（crawl）",
     cwd: "ModelIngest",
     command: "modelingest",
     build(p) {
-      const url = reqUrl(p.url);
       const output = reqPath(p.output, "output");
-      const args = ["crawl", "--url", url, "--output", output];
+      const rawUrls =
+        typeof p.urls === "string" && p.urls.trim() !== ""
+          ? p.urls.split(/\r?\n/).map((s) => s.trim()).filter(Boolean)
+          : p.url
+          ? [p.url]
+          : [];
+      req(rawUrls.length > 0, "至少需要一个 url（url 或 urls 二选一）");
+      req(rawUrls.length <= 500, "一次最多确认 500 个 url");
+      const urls = rawUrls.map(reqUrl);
+      const args = ["crawl", "--output", output];
+      for (const u of urls) args.push("--url", u);
       const depth = Math.max(0, Math.min(5, Number(p.depth) || 0));
       args.push("--depth", String(depth));
       if (p.ignoreRobots) args.push("--ignore-robots");
@@ -69,7 +95,29 @@ export const ACTIONS = {
       if (p.noInjectionScan) args.push("--no-injection-scan");
       if (p.noQualityFilter) args.push("--no-quality-filter");
       if (p.noDedup) args.push("--no-dedup");
+      if (typeof p.includes === "string" && p.includes.trim() !== "") {
+        const rels = p.includes
+          .split(/\r?\n/)
+          .map((s) => s.trim())
+          .filter(Boolean);
+        req(rels.length <= 2000, "一次最多确认 2000 个文件");
+        for (const rel of rels) {
+          req(!rel.includes("..") && !path.isAbsolute(rel), "include 相对路径非法");
+          args.push("--include", rel);
+        }
+      }
       return args;
+    },
+  },
+  "ingest.scan": {
+    module: "model-ingest",
+    label: "预览本地目录（scan，不落盘）",
+    cwd: "ModelIngest",
+    command: "modelingest",
+    build(p) {
+      const source = reqPath(p.source, "source");
+      const output = reqPath(p.output, "output");
+      return ["scan", "--source", source, "--output", output];
     },
   },
   "ingest.status": {
@@ -96,7 +144,7 @@ export const ACTIONS = {
   },
   "ingest.distill": {
     module: "model-ingest",
-    label: "蒸馏知识库（distill）",
+    label: "蒸馏知识库（distill，外部 AI 处理）",
     cwd: "ModelIngest",
     command: "modelingest",
     build(p) {
@@ -104,8 +152,61 @@ export const ACTIONS = {
       const output = reqPath(p.output, "output");
       const args = ["distill", "--source", source, "--output", output];
       if (p.profile) args.push("--profile", reqEnum(p.profile, ["concept", "algorithm"], "profile"));
+      if (p.role) args.push("--role", reqEnum(p.role, ROLE_ENUM, "role"));
+      if (p.model) {
+        req(
+          typeof p.model === "string" && /^[\w.-]+(:[\w.:/-]+)?$/.test(p.model.trim()),
+          "model 需形如 provider 或 provider:model，如 deepseek 或 deepseek:deepseek-chat"
+        );
+        args.push("--model", p.model.trim());
+      }
       if (p.overwrite) args.push("--overwrite");
       if (p.noLink) args.push("--no-link");
+      return args;
+    },
+  },
+  "ingest.distillLink": {
+    module: "model-ingest",
+    label: "重建关联（distill-link，仅建链 + MOC）",
+    cwd: "ModelIngest",
+    command: "modelingest",
+    build(p) {
+      const output = reqPath(p.output, "output");
+      return ["distill-link", "--output", output];
+    },
+  },
+  "ingest.makeSkill": {
+    module: "model-ingest",
+    label: "生成知识库检索技能（make-skill）",
+    cwd: "ModelIngest",
+    command: "modelingest",
+    build(p) {
+      const vault = reqPath(p.vault, "vault");
+      const source = reqPath(p.source, "source");
+      req(
+        typeof p.name === "string" && p.name.trim().length > 0 && p.name.length <= 100,
+        "name 不能为空且需小于 100 字符"
+      );
+      req(
+        typeof p.description === "string" && p.description.trim().length > 0 && p.description.length <= 500,
+        "description 不能为空且需小于 500 字符"
+      );
+      const args = [
+        "make-skill",
+        "--name", p.name.trim(),
+        "--description", p.description.trim(),
+        "--vault", vault,
+        "--source", source,
+      ];
+      if (p.triggers) {
+        req(typeof p.triggers === "string" && p.triggers.length <= 500, "triggers 需小于 500 字符");
+        args.push("--triggers", p.triggers.trim());
+      }
+      if (p.modelSpec) {
+        req(typeof p.modelSpec === "string" && p.modelSpec.length <= 100, "modelSpec 需小于 100 字符");
+        args.push("--model-spec", p.modelSpec.trim());
+      }
+      if (p.profile) args.push("--profile", reqEnum(p.profile, ["concept", "algorithm"], "profile"));
       return args;
     },
   },
@@ -116,6 +217,25 @@ export const ACTIONS = {
     command: "modelprovider",
     build() {
       return ["list"];
+    },
+  },
+  "provider.listJson": {
+    module: "model-provider",
+    label: "查看 provider / 角色状态（JSON）",
+    cwd: "ModelProvider",
+    command: "modelprovider",
+    build() {
+      return ["list", "--json"];
+    },
+  },
+  "provider.models": {
+    module: "model-provider",
+    label: "列出本地 Ollama 已安装型号",
+    cwd: "ModelProvider",
+    command: "modelprovider",
+    build(p) {
+      const provider = reqEnum(p.provider || "ollama", ["ollama"], "provider");
+      return ["models", "--provider", provider, "--json"];
     },
   },
   "provider.ask": {

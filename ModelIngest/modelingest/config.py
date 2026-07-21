@@ -60,6 +60,9 @@ class IngestConfig:
     pdf_page_dpi: int = 150
     overwrite: bool = False  # True 时忽略 manifest，全量重转
     exts: set[str] = field(default_factory=lambda: set(SUPPORTED_EXTS))
+    # 非 None 时，只处理这个集合里的相对路径（posix 分隔符）；用于"先扫描目录、
+    # 用户勾选确认后只转换选中文件"的场景。None = 处理 source_root 下所有匹配文件。
+    include: "set[str] | None" = None
     # 清洗（阶段 A）开关：见 cleaner.py。
     clean_html: bool = True            # 网页正文去噪（剔除 nav/广告/隐藏样板）
     neutralize_injection: bool = True  # 中和疑似面向 AI 的注入指令

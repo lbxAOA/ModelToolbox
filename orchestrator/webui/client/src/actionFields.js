@@ -1,9 +1,16 @@
 // 与 server/src/actions.js 中的 build(params) 一一对应的表单字段描述。
 export const ACTION_FIELDS = {
+  "ingest.discover": [
+    { name: "url", label: "起始 URL", type: "text", placeholder: "https://example.com", required: true },
+    { name: "depth", label: "发现深度（跟随分支链接层数）", type: "number", default: 1 },
+    { name: "maxPages", label: "最多发现页面数（安全上限）", type: "number", default: 100 },
+    { name: "allowCrossDomain", label: "允许跨域跟随", type: "checkbox" },
+    { name: "ignoreRobots", label: "忽略 robots.txt", type: "checkbox" },
+  ],
   "ingest.crawl": [
-    { name: "url", label: "URL", type: "text", placeholder: "https://example.com", required: true },
-    { name: "output", label: "输出目录（仓库内相对路径）", type: "text", placeholder: "ObsidianRag/_crawled", required: true },
-    { name: "depth", label: "抓取深度", type: "number", default: 1 },
+    { name: "output", label: "输出目录（仓库内相对路径，原始文档）", type: "text", placeholder: "ObsidianRag/_crawled", required: true },
+    { name: "urls", label: "确认抓取的 URL（每行一个）", type: "textarea", placeholder: "https://example.com/a\nhttps://example.com/b" },
+    { name: "depth", label: "抓取深度（一般填 0，分支已由 discover 确认）", type: "number", default: 0 },
     { name: "ignoreRobots", label: "忽略 robots.txt", type: "checkbox" },
     { name: "overwrite", label: "覆盖已存在文件", type: "checkbox" },
   ],
@@ -26,12 +33,15 @@ export const ACTION_FIELDS = {
     { name: "output", label: "输出目录", type: "text", required: true },
   ],
   "ingest.distill": [
-    { name: "source", label: "md 源目录", type: "text", required: true },
-    { name: "output", label: "输出目录", type: "text", required: true },
+    { name: "source", label: "md 源目录（本地目录，需为清洗后的 md）", type: "text", required: true },
+    { name: "output", label: "Obsidian 知识库输出目录", type: "text", required: true },
     { name: "profile", label: "蒸馏 profile", type: "select", options: ["", "concept", "algorithm"] },
+    { name: "role", label: "外部 AI 角色（role）", type: "select", options: ["", "teacher", "fallback", "runner"] },
+    { name: "model", label: "覆盖模型（可选，形如 provider:model）", type: "text", placeholder: "deepseek:deepseek-chat" },
     { name: "overwrite", label: "覆盖已存在文件", type: "checkbox" },
     { name: "noLink", label: "跳过关联链接", type: "checkbox" },
   ],
+  "ingest.distillLink": [{ name: "output", label: "知识库(vault)根目录", type: "text", required: true }],
   "provider.list": [],
   "provider.ask": [
     { name: "prompt", label: "Prompt", type: "textarea", required: true },

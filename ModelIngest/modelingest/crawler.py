@@ -11,6 +11,8 @@
   （优先用条件请求 If-None-Match / If-Modified-Since，退化时用内容 sha256 兜底）。
 - 可选浅层深度抓取：``max_depth=0`` 只抓给定 URL；>0 时从 HTML 中提取 ``<a href>``
   链接继续抓取（默认限制同域，且有 ``max_pages`` 安全上限防止失控）。
+- 可选"只发现不落盘"：:func:`discover` 只跟随链接列出分支页面目录（URL/标题/层级），
+  不写文件也不写 manifest，供阶段 A 前置的"确认目录后再抓取"流程使用。
 """
 
 from __future__ import annotations
@@ -41,7 +43,10 @@ _CONTENT_TYPE_EXT = {
     "text/csv": ".csv",
 }
 
-_LINK_RE = re.compile(r'href=["\']([^"\'#]+)', re.IGNORECASE)
+# href 可能是带引号（单/双）或不带引号的 HTML5 写法（很多站点压缩 HTML 后会省略引号，
+# 如 oi-wiki.org 的 `href=dp/`），三种写法都要支持，否则大量真实导航链接会被漏掉。
+_LINK_RE = re.compile(r'href=(?:"([^"]*)"|\'([^\']*)\'|([^\s"\'=<>`]+))', re.IGNORECASE)
+_TITLE_RE = re.compile(r"<title[^>]*>(.*?)</title>", re.IGNORECASE | re.DOTALL)
 
 
 class CrawlError(RuntimeError):
@@ -116,6 +121,38 @@ class CrawlSummary:
     skipped: int = 0
     failed: int = 0
     results: list[CrawlResult] = field(default_factory=list)
+
+
+@dataclass
+class DiscoverConfig:
+    """一次"只发现分支页面、不落盘"运行的配置（阶段 A 前置的目录确认步骤）。"""
+
+    urls: list[str]
+    max_depth: int = 1  # 0 = 只探测给定 URL 本身
+    same_domain_only: bool = True
+    delay: float = 0.5
+    timeout: float = 20.0
+    user_agent: str = DEFAULT_USER_AGENT
+    respect_robots: bool = True
+    max_pages: int = 100  # 安全上限，防止分支过多失控
+
+
+@dataclass
+class DiscoverEntry:
+    url: str
+    depth: int
+    parent: str | None
+    title: str | None
+    status: str  # "ok" | "failed"
+    error: str | None = None
+
+
+@dataclass
+class DiscoverResult:
+    total: int = 0
+    ok: int = 0
+    failed: int = 0
+    entries: list[DiscoverEntry] = field(default_factory=list)
 
 
 # --------------------------------------------------------------------------- #
@@ -244,14 +281,41 @@ def _extract_links(html: str, base_url: str, same_domain_only: bool) -> list[str
     base_parsed = urllib.parse.urlsplit(base_url)
     out: list[str] = []
     for m in _LINK_RE.finditer(html):
-        abs_url = urllib.parse.urljoin(base_url, m.group(1))
+        raw = m.group(1) if m.group(1) is not None else (m.group(2) if m.group(2) is not None else m.group(3))
+        if not raw:
+            continue
+        abs_url = urllib.parse.urljoin(base_url, raw)
         parsed = urllib.parse.urlsplit(abs_url)
         if parsed.scheme not in ("http", "https"):
             continue
         if same_domain_only and parsed.netloc != base_parsed.netloc:
             continue
-        out.append(urllib.parse.urlunsplit((parsed.scheme, parsed.netloc, parsed.path, parsed.query, "")))
+        # 空路径归一化为 "/"，避免同一页面因末尾斜杠有无被当成两个 URL 重复发现/抓取。
+        path = parsed.path or "/"
+        out.append(urllib.parse.urlunsplit((parsed.scheme, parsed.netloc, path, parsed.query, "")))
     return out
+
+
+_ASSET_EXTS = {
+    ".css", ".js", ".mjs", ".map", ".json", ".xml",
+    ".png", ".jpg", ".jpeg", ".gif", ".svg", ".ico", ".webp", ".avif",
+    ".woff", ".woff2", ".ttf", ".eot",
+    ".zip", ".gz", ".mp4", ".webm", ".mp3", ".wasm",
+}
+
+
+def _is_asset_url(url: str) -> bool:
+    """粗略判断是否是静态资源（css/js/图片/字体等），discover 时不当作分支页面跟随/收录。"""
+    suffix = Path(urllib.parse.urlsplit(url).path).suffix.lower()
+    return suffix in _ASSET_EXTS
+
+
+def _extract_title(html: str) -> str | None:
+    m = _TITLE_RE.search(html)
+    if not m:
+        return None
+    text = re.sub(r"\s+", " ", m.group(1)).strip()
+    return text[:200] or None
 
 
 # --------------------------------------------------------------------------- #
@@ -336,3 +400,58 @@ def crawl(cfg: CrawlConfig) -> CrawlSummary:
         manifest.close()
 
     return summary
+
+
+def discover(cfg: DiscoverConfig) -> DiscoverResult:
+    """只发现 ``cfg.urls`` 下的分支页面结构（跟随链接但不落盘、不写 manifest）。
+
+    用于阶段 A 前置的"确认目录"步骤：先把网址下所有能命中的分支页面（标题 +
+    URL + 层级）列出来，供用户勾选确认后，再把确认结果交给 :func:`crawl` 真正抓取。
+    """
+    result = DiscoverResult()
+    seen: set[str] = set()
+    queue: list[tuple[str, int, str | None]] = [(u, 0, None) for u in cfg.urls]
+
+    while queue and len(seen) < cfg.max_pages:
+        url, depth, parent = queue.pop(0)
+        if url in seen:
+            continue
+        seen.add(url)
+
+        if cfg.respect_robots and not _robots_allowed(url, cfg.user_agent, cfg.timeout):
+            result.total += 1
+            result.failed += 1
+            result.entries.append(DiscoverEntry(url, depth, parent, None, "failed", "disallowed by robots.txt"))
+            continue
+
+        try:
+            resp = FETCH(url, {"User-Agent": cfg.user_agent}, cfg.timeout)
+        except CrawlError as exc:
+            result.total += 1
+            result.failed += 1
+            result.entries.append(DiscoverEntry(url, depth, parent, None, "failed", str(exc)))
+            continue
+
+        if resp.status >= 400:
+            result.total += 1
+            result.failed += 1
+            result.entries.append(DiscoverEntry(url, depth, parent, None, "failed", f"HTTP {resp.status}"))
+            continue
+
+        ctype = resp.headers.get("content-type", "").split(";")[0].strip().lower()
+        is_html = ctype in ("text/html", "application/xhtml+xml") or not ctype
+        html_text = resp.body.decode("utf-8", "replace") if is_html else ""
+
+        result.total += 1
+        result.ok += 1
+        result.entries.append(DiscoverEntry(url, depth, parent, _extract_title(html_text) if is_html else None, "ok"))
+
+        if is_html and depth < cfg.max_depth:
+            for link in _extract_links(html_text, url, cfg.same_domain_only):
+                if link not in seen and not _is_asset_url(link):
+                    queue.append((link, depth + 1, url))
+
+        if cfg.delay > 0 and queue:
+            time.sleep(cfg.delay)
+
+    return result

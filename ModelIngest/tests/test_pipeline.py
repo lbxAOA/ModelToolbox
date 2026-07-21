@@ -108,6 +108,40 @@ def test_manifest_find_near_duplicate(tmp_path: Path):
     m.close()
 
 
+def test_scan_reports_new_changed_unchanged_without_writing(tmp_path: Path):
+    src = _mk_source(tmp_path)
+    out = tmp_path / "out"
+    cfg = IngestConfig(source_root=src, output_root=out)
+
+    # 尚未 run 过：scan 全部报告为 new，且不产出任何 md / manifest 记录。
+    first = pipeline.scan(cfg)
+    assert {e.rel_path for e in first} == {"a.txt", "sub/b.txt"}
+    assert all(e.status == "new" for e in first)
+    # scan 只读 manifest（缓存库本身可能被创建），不应产出任何 md 文件。
+    assert list(out.rglob("*.md")) == []
+
+    pipeline.run(cfg)
+    # run 过一次后：内容未变 → unchanged
+    second = pipeline.scan(cfg)
+    assert {e.rel_path: e.status for e in second} == {"a.txt": "unchanged", "sub/b.txt": "unchanged"}
+
+    # 修改一个文件后 → changed，另一个仍 unchanged
+    (src / "a.txt").write_text("hello CHANGED, still a sufficiently long test paragraph.", encoding="utf-8")
+    third = pipeline.scan(cfg)
+    assert {e.rel_path: e.status for e in third} == {"a.txt": "changed", "sub/b.txt": "unchanged"}
+
+
+def test_include_filter_restricts_run_to_selected_files(tmp_path: Path):
+    src = _mk_source(tmp_path)
+    out = tmp_path / "out"
+    cfg = IngestConfig(source_root=src, output_root=out, include={"a.txt"})
+
+    summary = pipeline.run(cfg)
+    assert summary.converted == 1
+    assert (out / "a.md").exists()
+    assert not (out / "sub" / "b.md").exists()
+
+
 def test_quality_filter_skips_low_quality_source(tmp_path: Path):
     src = tmp_path / "src"
     src.mkdir()

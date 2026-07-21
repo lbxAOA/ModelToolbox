@@ -2,6 +2,10 @@
 
 两段式管线（外加阶段 A 前置的可选抓取）：
 
+阶段 A 前置 —— discover（只发现分支页面目录，不落盘，供确认后再 crawl）::
+
+    modelingest discover --url <URL> [--url <URL> ...] [--depth 1] [--max-pages 100]
+
 阶段 A 前置 —— crawl（抓取公开网页/文件到本地，产物是原始 .html/.pdf/...）::
 
     modelingest crawl --url <URL> [--url <URL> ...] --output <原始文档目录> \
@@ -9,7 +13,8 @@
 
 阶段 A —— parse（原始文档 → 干净 md）::
 
-    modelingest run    --source <原始文档目录> --output <md输出目录> [--no-pdf-pages] [--overwrite]
+    modelingest scan   --source <本地目录> --output <...>            # 只预览会被转换的文件清单，不落盘
+    modelingest run    --source <原始文档目录> --output <md输出目录> [--include <相对路径> ...] [--overwrite]
     modelingest status --source <...> --output <...>
     modelingest clean  --source <...> --output <...>
 
@@ -47,6 +52,19 @@ def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="modelingest", description="原始文档 → Markdown 语料转换器")
     sub = p.add_subparsers(dest="command", required=True)
 
+    # ---- 阶段 A 前置：discover（只发现分支页面目录，不落盘） ----
+    ds_p = sub.add_parser("discover", help="发现网址下的分支页面目录（不落盘），供确认后再 crawl")
+    ds_p.add_argument("--url", "-u", action="append", dest="urls", default=[],
+                       help="起始 URL（可重复传入）")
+    ds_p.add_argument("--urls-file", help="URL 列表文件，每行一个（# 开头视为注释）")
+    ds_p.add_argument("--depth", type=int, default=1, help="跟随分支链接发现的深度（默认 1）")
+    ds_p.add_argument("--allow-cross-domain", action="store_true", help="跟随链接时允许跨域（默认只发现同域）")
+    ds_p.add_argument("--delay", type=float, default=0.5, help="请求间隔秒数（礼貌抓取）")
+    ds_p.add_argument("--timeout", type=float, default=20.0, help="单次请求超时秒数")
+    ds_p.add_argument("--max-pages", type=int, default=100, help="本次最多发现的页面数（安全上限）")
+    ds_p.add_argument("--ignore-robots", action="store_true", help="忽略 robots.txt（默认遵守，谨慎使用）")
+    ds_p.add_argument("--user-agent", default=None, help="自定义 User-Agent")
+
     # ---- 阶段 A 前置：crawl ----
     cr_p = sub.add_parser("crawl", help="抓取公开网页/文件到本地（产物随后可用 run 正常转换）")
     cr_p.add_argument("--url", "-u", action="append", dest="urls", default=[],
@@ -67,6 +85,8 @@ def build_parser() -> argparse.ArgumentParser:
     run_p = sub.add_parser("run", help="执行转换（增量）")
     _add_common(run_p)
     run_p.add_argument("--overwrite", action="store_true", help="忽略 manifest，全量重转")
+    run_p.add_argument("--include", action="append", dest="include", default=None,
+                       help="只转换指定的相对路径（可重复；缺省转换全部匹配文件）")
     run_p.add_argument("--no-pdf-pages", action="store_true", help="不抽取 PDF 页图")
     run_p.add_argument("--dpi", type=int, default=150, help="PDF 页图渲染 DPI")
     run_p.add_argument("--no-html-clean", action="store_true", help="不做网页正文去噪（保留 nav/广告等样板内容）")
@@ -74,6 +94,9 @@ def build_parser() -> argparse.ArgumentParser:
     run_p.add_argument("--no-quality-filter", action="store_true", help="不过滤空内容/登录墙/错误页等低质量源")
     run_p.add_argument("--no-dedup", action="store_true", help="不做跨来源近似去重检测")
     run_p.add_argument("--dedup-distance", type=int, default=3, help="近似去重 SimHash 汉明距离阈值（默认 3/64 bit）")
+
+    sc_p = sub.add_parser("scan", help="预览本地目录会被转换的文件清单（不落盘，供确认后再 run）")
+    _add_common(sc_p)
 
     st_p = sub.add_parser("status", help="报告待转/已转/失效数量")
     _add_common(st_p)
@@ -98,10 +121,21 @@ def build_parser() -> argparse.ArgumentParser:
     dl_p = sub.add_parser("distill-link", help="只重跑第二遍：建 [[wikilink]] + 生成 MOC")
     dl_p.add_argument("--output", "-o", required=True, help="知识库(vault)根目录")
 
+    # ---- B 部分收尾：为荒馆新蒸馆好的知识库自动生成一个 ModelSkill 技能 ----
+    mk_p = sub.add_parser("make-skill", help="为一个知识库自动生成/注册一个检索技能（ModelSkill）")
+    mk_p.add_argument("--name", required=True, help="知识库名称（会被 slug 化作为技能标识）")
+    mk_p.add_argument("--description", required=True, help="一句话描述（会拼入触发词）")
+    mk_p.add_argument("--triggers", default="", help="逗号分隔的触发词")
+    mk_p.add_argument("--vault", required=True, help="知识库(vault)根目录")
+    mk_p.add_argument("--source", required=True, help="原始 md 语料目录")
+    mk_p.add_argument("--model-spec", default="", help="蒸馆用的 provider:model 或 role（仅用于写入技能说明）")
+    mk_p.add_argument("--profile", default="concept", help="笔记模板（仅用于写入技能说明）")
+
     return p
 
 
 def _make_cfg(args) -> IngestConfig:
+    include = getattr(args, "include", None)
     return IngestConfig(
         source_root=Path(args.source),
         output_root=Path(args.output),
@@ -109,6 +143,7 @@ def _make_cfg(args) -> IngestConfig:
         extract_pdf_pages=not getattr(args, "no_pdf_pages", False),
         pdf_page_dpi=getattr(args, "dpi", 150),
         overwrite=getattr(args, "overwrite", False),
+        include=set(include) if include else None,
         clean_html=not getattr(args, "no_html_clean", False),
         neutralize_injection=not getattr(args, "no_injection_scan", False),
         quality_filter=not getattr(args, "no_quality_filter", False),
@@ -130,6 +165,43 @@ def _collect_crawl_urls(args) -> list[str]:
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+
+    if args.command == "discover":
+        import json
+
+        from .crawler import DiscoverConfig, DEFAULT_USER_AGENT, discover as discover_run
+
+        urls = _collect_crawl_urls(args)
+        if not urls:
+            print("✗ 请通过 --url 或 --urls-file 提供至少一个 URL", file=sys.stderr)
+            return 2
+
+        dcfg = DiscoverConfig(
+            urls=urls,
+            max_depth=args.depth,
+            same_domain_only=not args.allow_cross_domain,
+            delay=args.delay,
+            timeout=args.timeout,
+            user_agent=args.user_agent or DEFAULT_USER_AGENT,
+            respect_robots=not args.ignore_robots,
+            max_pages=args.max_pages,
+        )
+        result = discover_run(dcfg)
+        print(f"✅ 发现 {result.total} 个页面 · 可用 {result.ok} · 失败 {result.failed}")
+        catalog = [
+            {
+                "url": e.url,
+                "depth": e.depth,
+                "parent": e.parent,
+                "title": e.title,
+                "status": e.status,
+                "error": e.error,
+            }
+            for e in result.entries
+        ]
+        # 前端从任务日志里抓取这一行解析出目录，供用户勾选确认后再调用 crawl。
+        print("@@CATALOG_JSON@@" + json.dumps(catalog, ensure_ascii=False))
+        return 0
 
     if args.command == "crawl":
         from .crawler import CrawlConfig, DEFAULT_USER_AGENT, crawl as crawl_run
@@ -159,8 +231,21 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"  ✗ {r.url}: {r.error}", file=sys.stderr)
         return 1 if (summary.failed and not summary.fetched) else 0
 
-    if args.command in {"run", "status", "clean"}:
+    if args.command in {"run", "scan", "status", "clean"}:
         cfg = _make_cfg(args)
+
+    if args.command == "scan":
+        import json
+
+        entries = pipeline.scan(cfg)
+        print(f"✅ 发现 {len(entries)} 个可转换文件")
+        catalog = [
+            {"path": e.rel_path, "ext": e.ext, "size": e.size, "status": e.status}
+            for e in entries
+        ]
+        # 前端从任务日志里抓取这一行解析出目录，供用户勾选确认后再调用 run --include。
+        print("@@CATALOG_JSON@@" + json.dumps(catalog, ensure_ascii=False))
+        return 0
 
     if args.command == "run":
         summary = pipeline.run(cfg)
@@ -222,6 +307,24 @@ def main(argv: list[str] | None = None) -> int:
         from .distill import link_only
         stats = link_only(Path(args.output))
         print(f"🔗 建链 {stats['relinked']} 篇 · MOC {stats['mocs']} 个 · 标题索引 {stats['titles']}")
+        return 0
+
+    if args.command == "make-skill":
+        from .skillgen import SkillGenError, generate_knowledge_base_skill
+        try:
+            result = generate_knowledge_base_skill(
+                name=args.name,
+                description=args.description,
+                triggers=args.triggers,
+                vault_root=Path(args.vault),
+                source_root=Path(args.source),
+                model_spec=args.model_spec,
+                profile=args.profile,
+            )
+        except SkillGenError as exc:
+            print(f"✗ {exc}", file=sys.stderr)
+            return 1
+        print(f"✅ 已生成技能 '{result.name}' -> {result.skill_path}")
         return 0
 
     return 2
