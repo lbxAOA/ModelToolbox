@@ -195,9 +195,11 @@ def convert_to_markdown(path: Path) -> tuple[str, str]:
     全部失败则抛 ``ConversionError``。
     """
     order = _priority()
-    # 纯文本类保证有 passthrough 兜底。
-    if path.suffix.lower() in PASSTHROUGH_EXTS and "passthrough" not in order:
-        order = [*order, "passthrough"]
+    if path.suffix.lower() in PASSTHROUGH_EXTS:
+        # 纯文本类（.txt/.md/.csv）直读最可靠、无损：优先于通用转换器
+        # （markitdown 等对纯文本重新解释反而可能引入不必要的差异），
+        # 保证一定会被尝试到（而不是仅在其它解析器都失败时才兜底）。
+        order = ["passthrough", *[n for n in order if n != "passthrough"]]
 
     errors: list[str] = []
     for name in order:

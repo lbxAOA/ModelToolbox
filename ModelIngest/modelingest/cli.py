@@ -69,6 +69,11 @@ def build_parser() -> argparse.ArgumentParser:
     run_p.add_argument("--overwrite", action="store_true", help="忽略 manifest，全量重转")
     run_p.add_argument("--no-pdf-pages", action="store_true", help="不抽取 PDF 页图")
     run_p.add_argument("--dpi", type=int, default=150, help="PDF 页图渲染 DPI")
+    run_p.add_argument("--no-html-clean", action="store_true", help="不做网页正文去噪（保留 nav/广告等样板内容）")
+    run_p.add_argument("--no-injection-scan", action="store_true", help="不做 prompt injection 隔离标记")
+    run_p.add_argument("--no-quality-filter", action="store_true", help="不过滤空内容/登录墙/错误页等低质量源")
+    run_p.add_argument("--no-dedup", action="store_true", help="不做跨来源近似去重检测")
+    run_p.add_argument("--dedup-distance", type=int, default=3, help="近似去重 SimHash 汉明距离阈值（默认 3/64 bit）")
 
     st_p = sub.add_parser("status", help="报告待转/已转/失效数量")
     _add_common(st_p)
@@ -104,6 +109,11 @@ def _make_cfg(args) -> IngestConfig:
         extract_pdf_pages=not getattr(args, "no_pdf_pages", False),
         pdf_page_dpi=getattr(args, "dpi", 150),
         overwrite=getattr(args, "overwrite", False),
+        clean_html=not getattr(args, "no_html_clean", False),
+        neutralize_injection=not getattr(args, "no_injection_scan", False),
+        quality_filter=not getattr(args, "no_quality_filter", False),
+        near_dup_check=not getattr(args, "no_dedup", False),
+        near_dup_max_distance=getattr(args, "dedup_distance", 3),
     )
 
 
@@ -154,10 +164,17 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "run":
         summary = pipeline.run(cfg)
-        print(f"✅ 转换 {summary.converted} · 跳过 {summary.skipped} · 失败 {summary.failed}")
+        print(
+            f"✅ 转换 {summary.converted} · 跳过 {summary.skipped} · "
+            f"过滤 {summary.filtered} · 失败 {summary.failed}"
+        )
         for r in summary.results:
             if r.status == "failed":
                 print(f"  ✗ {r.rel_path}: {r.error}", file=sys.stderr)
+            elif r.status == "filtered":
+                print(f"  ⚠ {r.rel_path}: 已过滤（{r.error}）")
+            elif r.note:
+                print(f"  ℹ {r.rel_path}: {r.note}")
         return 1 if summary.failed else 0
 
     if args.command == "status":
