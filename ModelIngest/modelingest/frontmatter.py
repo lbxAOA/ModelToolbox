@@ -27,6 +27,8 @@ def build_frontmatter(
     converter: str,
     assets: Iterable[str] | None = None,
     converted_at: str | None = None,
+    near_duplicate_of: str | None = None,
+    injection_flagged: int | None = None,
 ) -> str:
     ts = converted_at or datetime.now(timezone.utc).isoformat()
     lines = ["---"]
@@ -39,6 +41,10 @@ def build_frontmatter(
         lines.append("assets:")
         for a in assets:
             lines.append(f"  - {_yaml_escape(a)}")
+    if near_duplicate_of:
+        lines.append(f"near_duplicate_of: {_yaml_escape(near_duplicate_of)}")
+    if injection_flagged:
+        lines.append(f"injection_flagged: {injection_flagged}")
     lines.append("generator: ModelIngest")
     lines.append("---")
     return "\n".join(lines) + "\n\n"

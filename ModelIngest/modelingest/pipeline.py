@@ -1,29 +1,36 @@
-"""ModelIngest 核心流程：遍历源目录 → 转换 → 写出带 front-matter 的 md（增量）。"""
+"""ModelIngest 核心流程：遍历源目录 → 清洗 → 转换 → 写出带 front-matter 的 md（增量）。"""
 
 from __future__ import annotations
 
+import os
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
+from . import cleaner
 from .assets import extract_pdf_pages
 from .config import IMAGE_EXTS, IngestConfig
 from .converter import ConversionError, convert_to_markdown
 from .frontmatter import build_frontmatter
 from .manifest import Manifest, sha256_file
 
+_HTML_EXTS = {".html", ".htm"}
+
 
 @dataclass
 class FileResult:
     rel_path: str
-    status: str  # "converted" | "skipped" | "failed"
+    status: str  # "converted" | "skipped" | "filtered" | "failed"
     output_path: str | None = None
     error: str | None = None
+    note: str | None = None  # 附加信息（如近似去重命中），不代表失败
 
 
 @dataclass
 class RunSummary:
     converted: int = 0
     skipped: int = 0
+    filtered: int = 0
     failed: int = 0
     results: list[FileResult] = None  # type: ignore[assignment]
 
@@ -42,6 +49,25 @@ def _iter_source_files(cfg: IngestConfig):
         if any(part.startswith(".") for part in path.relative_to(cfg.source_root).parts):
             continue
         yield path
+
+
+def _prepare_source_for_conversion(src: Path, cfg: IngestConfig) -> tuple[Path, bool]:
+    """网页源文件在转换前先去噪；返回 (实际用于转换的路径, 是否为需清理的临时文件)。"""
+    if not cfg.clean_html or src.suffix.lower() not in _HTML_EXTS:
+        return src, False
+    try:
+        raw = src.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return src, False
+    cleaned = cleaner.strip_html_boilerplate(raw)
+    fd, tmp_name = tempfile.mkstemp(suffix=src.suffix)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(cleaned)
+    except Exception:
+        Path(tmp_name).unlink(missing_ok=True)
+        return src, False
+    return Path(tmp_name), True
 
 
 def run(cfg: IngestConfig) -> RunSummary:
@@ -63,12 +89,41 @@ def run(cfg: IngestConfig) -> RunSummary:
             out_path = (cfg.output_root / src.relative_to(cfg.source_root)).with_suffix(".md")
             out_path.parent.mkdir(parents=True, exist_ok=True)
 
+            conv_src, is_tmp = _prepare_source_for_conversion(src, cfg)
             try:
-                body, converter_name = convert_to_markdown(src)
+                body, converter_name = convert_to_markdown(conv_src)
             except ConversionError as exc:
                 summary.failed += 1
                 summary.results.append(FileResult(rel, "failed", error=str(exc)))
                 continue
+            finally:
+                if is_tmp:
+                    conv_src.unlink(missing_ok=True)
+
+            # 文本规范化：编码/换行/零宽字符清理（无条件执行）。
+            body = cleaner.normalize_text(body)
+
+            # Prompt injection 中和：隔离"疑似面向 AI 的隐藏指令"，不删除原文。
+            injection_flags: list[str] = []
+            if cfg.neutralize_injection:
+                body, injection_flags = cleaner.neutralize_prompt_injection(body)
+
+            # 质量过滤：空内容/登录墙/错误页等噪声源不产出 md，但仍记入 manifest
+            # （避免每次重跑都重新转换 + 重新判定）。
+            if cfg.quality_filter:
+                issue = cleaner.quality_issue(body)
+                if issue:
+                    manifest.record(rel, digest, "", f"filtered:{issue}")
+                    summary.filtered += 1
+                    summary.results.append(FileResult(rel, "filtered", error=issue))
+                    continue
+
+            # 近似去重：跨来源内容相似度检测，命中只标注不丢弃，交由下游/人工决定取舍。
+            dup_of: str | None = None
+            body_simhash: int | None = None
+            if cfg.near_dup_check:
+                body_simhash = cleaner.simhash(body)
+                dup_of = manifest.find_near_duplicate(rel, body_simhash, cfg.near_dup_max_distance)
 
             # PDF 抽页图（多模态素材，本地保留）
             assets: list[str] = []
@@ -85,12 +140,18 @@ def run(cfg: IngestConfig) -> RunSummary:
                 sha256=digest,
                 converter=converter_name,
                 assets=assets,
+                near_duplicate_of=dup_of,
+                injection_flagged=len(injection_flags) or None,
             )
             out_path.write_text(fm + body, encoding="utf-8")
 
-            manifest.record(rel, digest, out_path.relative_to(cfg.output_root).as_posix(), converter_name)
+            manifest.record(
+                rel, digest, out_path.relative_to(cfg.output_root).as_posix(), converter_name,
+                simhash=body_simhash,
+            )
             summary.converted += 1
-            summary.results.append(FileResult(rel, "converted", output_path=str(out_path)))
+            note = f"near_duplicate_of={dup_of}" if dup_of else None
+            summary.results.append(FileResult(rel, "converted", output_path=str(out_path), note=note))
     finally:
         manifest.close()
 
@@ -130,9 +191,12 @@ def clean(cfg: IngestConfig) -> int:
     try:
         for rel, _sha, out_rel, _conv, _ts in manifest.all_records():
             if not (cfg.source_root / rel).exists():
-                out_file = cfg.output_root / out_rel
-                if out_file.exists():
-                    out_file.unlink()
+                # 被质量过滤的记录 out_rel 为空字符串（未产出 md），不能拼成
+                # output_root 本身去 unlink，否则会误删整个输出目录。
+                if out_rel:
+                    out_file = cfg.output_root / out_rel
+                    if out_file.is_file():
+                        out_file.unlink()
                 manifest.remove(rel)
                 removed += 1
     finally:

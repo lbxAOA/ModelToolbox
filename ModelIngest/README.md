@@ -33,8 +33,13 @@
 | 解析器 | 可插拔注册表，按优先级降级：**mineru → docling → marker → markitdown → passthrough**；复杂 PDF（多栏/公式/表格/阅读顺序）优先用 mineru/docling，未安装则自动退到 markitdown |
 | 优先级覆盖 | `INGEST_PDF_PARSER=docling,markitdown`（逗号分隔）|
 | 保留原件 | 原件留在 `--source`，md 写到 `--output`（镜像目录），原件由根 `.gitignore` 排除 |
-| 溯源 | 每个 md 顶部 YAML front-matter：`source` / `sha256` / `converter` / `converted_at` / `assets` |
-| 增量 | sqlite manifest 记录源文件 hash，未变则跳过 |
+| **网页去噪** | HTML 源文件在转换前先剔除 `nav`/`header`/`footer`/`script`/`style`/表单等样板标签，以及通过 class/id/内联样式（`display:none` 等）判定为隐藏或广告/cookie 弹窗类噪声的区块（`cleaner.strip_html_boilerplate`，`--no-html-clean` 关闭）|
+| **文本规范化** | Unicode NFC、统一换行、剥离零宽/控制字符、折叠多余空行（`cleaner.normalize_text`，无条件执行）|
+| **质量过滤** | 剔除空内容/过短内容、登录墙、404/禁止访问等错误页关键词命中的低价值源，不产出 md（`cleaner.quality_issue`，`--no-quality-filter` 关闭）|
+| **Prompt injection 中和** | 扫描"忽略之前指令""你现在是……"一类面向 AI 的注入话术（中英文），命中行整体包裹成显式标注的引用块（不删除、仅隔离），避免阶段 B 外部大模型把爬来的网页内容当指令执行（`cleaner.neutralize_prompt_injection`，`--no-injection-scan` 关闭）|
+| **近似去重** | 对转换后正文算 64-bit SimHash，与 manifest 里已记录的其它文件比较汉明距离，命中只在 front-matter 标注 `near_duplicate_of`，不丢弃内容，交由下游/人工决定取舍（`--no-dedup` 关闭，`--dedup-distance` 调阈值，默认 3/64 bit）|
+| 溯源 | 每个 md 顶部 YAML front-matter：`source` / `sha256` / `converter` / `converted_at` / `assets`（可选 `near_duplicate_of` / `injection_flagged`）|
+| 增量 | sqlite manifest 记录源文件 hash（及 simhash），未变则跳过；被质量过滤的源也记入 manifest，避免每次重跑都重新判定 |
 | 多模态 | PDF 每页渲染 PNG 存 `assets/`（供视觉训练）；需 `PyMuPDF`，缺失则降级 |
 
 ### 阶段 B —— distill
@@ -88,6 +93,13 @@ modelingest clean  --source ../ObsidianRag --output ../ObsidianRag_md   # 清理
 modelingest run -s ../ObsidianRag -o ../ObsidianRag_md --no-pdf-pages   # 不抽页图
 modelingest run -s ../ObsidianRag -o ../ObsidianRag_md --overwrite      # 全量重转
 INGEST_PDF_PARSER=docling modelingest run -s ... -o ...                 # 指定解析器
+
+# 清洗相关开关（默认全部开启）
+modelingest run -s ../ObsidianRag -o ../ObsidianRag_md --no-html-clean       # 网页保留原始样板标签
+modelingest run -s ../ObsidianRag -o ../ObsidianRag_md --no-injection-scan   # 不做 prompt injection 隔离
+modelingest run -s ../ObsidianRag -o ../ObsidianRag_md --no-quality-filter   # 不过滤空/登录墙/错误页
+modelingest run -s ../ObsidianRag -o ../ObsidianRag_md --no-dedup            # 不做近似去重
+modelingest run -s ../ObsidianRag -o ../ObsidianRag_md --dedup-distance 5    # 放宽近似去重阈值
 ```
 
 ### 阶段 B —— distill
