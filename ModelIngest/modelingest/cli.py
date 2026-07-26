@@ -65,6 +65,22 @@ def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="modelingest", description="原始文档 → Markdown 语料转换器")
     sub = p.add_subparsers(dest="command", required=True)
 
+    # ---- 端到端：build（从 URL/本地目录直接构建知识库） ----
+    bd_p = sub.add_parser("build", help="端到端构建知识库（URL 或本地目录 → 结构化知识库）")
+    bd_p.add_argument("--source", "-s", required=True, help="输入源：Web URL 或本地目录路径")
+    bd_p.add_argument("--output", "-o", required=True, help="知识库输出目录")
+    bd_p.add_argument("--domain", default="通用", help="领域：算法/硬件/数学/通用（默认：通用）")
+    bd_p.add_argument("--quality", default="medium", choices=["high", "medium", "low"],
+                      help="质量等级：high(启用LLM蒸馏)/medium/low（默认：medium）")
+    bd_p.add_argument("--structure", default="obsidian", choices=["obsidian", "flat", "hierarchical"],
+                      help="输出结构：obsidian/flat/hierarchical（默认：obsidian）")
+    bd_p.add_argument("--crawl-depth", type=int, default=3, help="Web爬取深度（默认：3）")
+    bd_p.add_argument("--crawl-max-pages", type=int, default=500, help="最多爬取页面数（默认：500）")
+    bd_p.add_argument("--crawl-delay", type=float, default=0.5, help="爬取请求间隔秒数（默认：0.5）")
+    bd_p.add_argument("--no-same-domain", action="store_true", help="允许跨域爬取（默认：只爬同域）")
+    bd_p.add_argument("--no-distill", action="store_true", help="强制禁用蒸馏（即使 quality=high）")
+    bd_p.add_argument("--keep-temp", action="store_true", help="保留临时文件（用于调试）")
+
     # ---- 阶段 A 前置：discover（只发现分支页面目录，不落盘） ----
     ds_p = sub.add_parser("discover", help="发现网址下的分支页面目录（不落盘），供确认后再 crawl")
     ds_p.add_argument("--url", "-u", action="append", dest="urls", default=[],
@@ -152,6 +168,17 @@ def build_parser() -> argparse.ArgumentParser:
     gl_p.add_argument("--interactive", action="store_true",
                       help="未通过 flag 提供的问题改为在终端交互式询问（webui 不用，人工 CLI 可用）")
 
+    # ---- Ollama 优化：optimize（使用本地 LLM 优化 Markdown 内容） ----
+    opt_p = sub.add_parser("optimize", help="使用 Ollama 模型优化 Markdown 内容（提取概念、生成摘要、建立链接）")
+    opt_p.add_argument("--source", "-s", required=True, help="输入 Markdown 目录")
+    opt_p.add_argument("--output", "-o", required=True, help="优化后输出目录")
+    opt_p.add_argument("--model", default="qwen2.5:7b", help="Ollama 模型名称（默认：qwen2.5:7b）")
+    opt_p.add_argument("--template", default="knowledge_base", choices=["knowledge_base", "tutorial"],
+                      help="优化模板：knowledge_base（通用知识库）/tutorial（教程）")
+    opt_p.add_argument("--base-url", default="http://localhost:11434", help="Ollama API 地址")
+    opt_p.add_argument("--temperature", type=float, default=0.3, help="温度参数（0-1，越低越保守）")
+    opt_p.add_argument("--parallel", type=int, default=4, help="并行处理数量（默认：4）")
+
     # ---- B 部分收尾：为荒馆新蒸馆好的知识库自动生成一个 ModelSkill 技能 ----
     mk_p = sub.add_parser("make-skill", help="为一个知识库自动生成/注册一个检索技能（ModelSkill）")
     mk_p.add_argument("--name", required=True, help="知识库名称（会被 slug 化作为技能标识）")
@@ -196,6 +223,51 @@ def _collect_crawl_urls(args) -> list[str]:
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+
+    if args.command == "build":
+        from .builder import BuildConfig, KnowledgeBaseBuilder
+        from .progress import create_rich_progress_callback
+
+        # 创建构建配置
+        build_cfg = BuildConfig(
+            source=args.source,
+            output=Path(args.output),
+            domain=args.domain,
+            quality=args.quality,
+            structure=args.structure,
+            crawl_depth=args.crawl_depth,
+            crawl_max_pages=args.crawl_max_pages,
+            crawl_delay=args.crawl_delay,
+            same_domain_only=not args.no_same_domain,
+            enable_distill=False if args.no_distill else None,  # None 让它根据 quality 决定
+            keep_temp=args.keep_temp,
+        )
+
+        # 创建进度回调
+        progress_callback = create_rich_progress_callback()
+        build_cfg.progress_callback = progress_callback
+
+        # 执行构建
+        builder = KnowledgeBaseBuilder(build_cfg)
+        result = builder.build()
+
+        if result.success:
+            print(f"\n✅ 知识库构建完成！")
+            print(f"   输出目录: {result.output_path}")
+            print(f"   构建耗时: {result.duration:.1f}秒")
+            print(f"\n📊 统计:")
+            print(f"   - 获取文件: {result.stats.get('fetched', 0)}")
+            print(f"   - 转换文件: {result.stats.get('converted', 0)}")
+            if result.stats.get('distilled', 0) > 0:
+                print(f"   - 蒸馏笔记: {result.stats.get('distilled', 0)}")
+            print(f"   - 组织笔记: {result.stats.get('organized', 0)}")
+
+            return 0
+        else:
+            print(f"\n✗ 知识库构建失败")
+            for error in result.errors:
+                print(f"   {error}", file=sys.stderr)
+            return 1
 
     if args.command == "discover":
         import json

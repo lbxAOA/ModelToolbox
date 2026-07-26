@@ -1,0 +1,50 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "modeltoolbox"
+version = "0.1.0"
+description = "A terminal-first toolbox for model ingestion, memory, providers, skills, MCP, sandboxing, and training."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+dependencies = [
+    "typer>=0.12",
+]
+
+[project.scripts]
+mtb = "modeltoolbox_core.cli:main"
+
+[project.entry-points."mtb.plugins"]
+core = "modeltoolbox_core.cli:register"
+ingest = "modeltoolbox_ingest.cli:register"
+provider = "modeltoolbox_provider.cli:register"
+office = "modeltoolbox_office.cli:register"
+memory = "modeltoolbox_memory.cli:register"
+mcp = "modeltoolbox_mcp.cli:register"
+skill = "modeltoolbox_skill.cli:register"
+train = "modeltoolbox_training.cli:register"
+
+[tool.setuptools.packages.find]
+where = [
+    "ModelCore",
+    "ModelIngest",
+    "ModelProvider",
+    "ModelOffice",
+    "ModelMemory",
+    "ModelMCP",
+    "ModelSkill",
+    "ModelTraining",
+]
+include = [
+    "modelingest*",
+    "modeltoolbox_*",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

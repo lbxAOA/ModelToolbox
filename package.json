@@ -1,0 +1,41 @@
+{
+  "name": "modeltoolbox",
+  "version": "0.1.0",
+  "description": "npm-managed terminal entry for ModelToolbox.",
+  "license": "MIT",
+  "type": "commonjs",
+  "bin": {
+    "mtb": "./npm/mtb.cjs"
+  },
+  "files": [
+    "ModelCore/",
+    "ModelIngest/modelingest/",
+    "ModelIngest/modeltoolbox_ingest/",
+    "ModelProvider/modeltoolbox_provider/",
+    "ModelOffice/modeltoolbox_office/",
+    "ModelMemory/modeltoolbox_memory/",
+    "ModelMCP/modeltoolbox_mcp/",
+    "ModelSkill/modeltoolbox_skill/",
+    "ModelTraining/modeltoolbox_training/",
+    "npm/",
+    "!**/__pycache__/",
+    "!**/*.pyc",
+    "pyproject.toml",
+    "README.md",
+    "LICENSE",
+    "THIRD_PARTY.md"
+  ],
+  "scripts": {
+    "postinstall": "node ./npm/bootstrap.cjs",
+    "bootstrap": "node ./npm/bootstrap.cjs",
+    "start": "node ./npm/mtb.cjs",
+    "mtb": "node ./npm/mtb.cjs",
+    "doctor": "node ./npm/mtb.cjs doctor",
+    "version": "node ./npm/mtb.cjs version",
+    "update": "npm install -g .",
+    "uninstall": "npm uninstall -g modeltoolbox"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

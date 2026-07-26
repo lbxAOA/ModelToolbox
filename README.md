@@ -1,108 +1,165 @@
-<h1 align="center">ModelToolbox</h1>
+# ModelToolbox
 
-<p align="center">
-  <b>一整套「私有 · 小样本 · 多模态」本地模型系统</b><br>
-  在个人笔记本上，把你自己的知识库训练进一个小模型，<br>
-  让它在你覆盖的领域内（含看原理图 / PCB）达到甚至超过通用旗舰模型的水平。
-</p>
+ModelToolbox is a terminal-first workspace for model ingestion, local memory, MCP management, skills, sandboxed execution, provider routing, and small-model training workflows.
 
-<p align="center">
-  <a href="#-理念">理念</a> •
-  <a href="#-系统架构">架构</a> •
-  <a href="#-模块一览">模块</a> •
-  <a href="#-快速开始">快速开始</a> •
-  <a href="#-许可证">许可证</a>
-</p>
+The refactor target is one Python workspace with a single `mtb` command. Each `Model*` directory owns one bounded capability and shares only the `ModelCore` utilities for configuration, paths, process execution, JSON output, plugin loading, and SQLite state.
 
----
+## Modules
 
-## ✨ 理念
+- `ModelCore`: shared CLI, configuration, path guards, subprocess wrapper, JSON output, SQLite helpers, and deletion guard.
+- `ModelIngest`: crawl websites, public URLs, local folders, and common file formats into organized Markdown libraries with `INDEX.md`.
+- `ModelProvider`: route model and agent runtime calls across Ollama, OpenAI-compatible APIs, Anthropic, Azure OpenAI, Copilot CLI, Claude Code, Codex, and Aider.
+- `ModelOffice`: local sandbox environments with venv management, bounded command execution, and workspace snapshots.
+- `ModelMemory`: local SQLite FTS index for project files to reduce repeated model reads.
+- `ModelMCP`: MCP server registry, discovery, scaffold generation, and config export.
+- `ModelSkill`: build and manage skills from ingested Markdown libraries.
+- `ModelTraining`: self-owned training planning, dataset inspection, distillation objectives, architecture presets, and export manifests.
 
-主流「大模型 + RAG」方案在个人笔记本上有两个痛点：**吃硬件**、**依赖联网的闭源 API**。
+## Install
 
-ModelToolbox 走另一条路 —— **训练为主，检索兜底**：
+Install the terminal app globally from this checkout:
 
-- **知识焊进权重**：用你的 Obsidian 知识库微调一个小的多模态模型（Gemma 系，自带视觉），
-  知识进了权重，推理时只需一个轻量本地模型。
-- **看得见图**：模型保留视觉能力，能读你的原理图 / PCB 截图，结合领域知识做判断、挑错。
-- **窄领域超越旗舰**：在「你亲手喂过的知识点 + 看图判断」上，一个专精小模型可以胜过
-  「什么都会但都不精」的通用旗舰。
-- **闭源 API 作为工具**：需要时调用 OpenAI / Anthropic / Gemini / DeepSeek —— 主要用来
-  **蒸馏训练数据**（老师模型）和**兜底 / 效果对比**，而非日常依赖。
-
-> 现实校准：能做到的是「在你的知识点与看图判断上超过旗舰」；做不到的是「在整个领域全面超过」。
-> 目标锚定前者。
-
-## 🏗 系统架构
-
-```
-原始文档(本地,不上传)
-   PDF / Word / Excel / PPT / 图片
-        │
-        ▼  ① ModelIngest  ── 转 md + 抽页图,保留原件
-   md 语料 + 页图(assets,本地)
-        │
-        ▼  ② 数据合成(ModelProvider 老师模型) ── PDF/md → 数千训练样本
-   训练集(问答 / 看图推理 / 原理图挑错)
-        │
-        ▼  ③ ModelTraining(unsloth) ── Gemma 视觉 LoRA 微调 → GGUF + mmproj
-   私有多模态模型
-        │
-        ▼  ④ Ollama serve(本地) ── ollama create / serve
-   localhost:11434 (/v1 OpenAI 兼容 + /api)
-        │
-   ┌────┴─────────────────────────────┐
-   ▼ 人肉通道                          ▼ 系统通道
-   VSCode Copilot 选本地模型           Agent 运行时 / MCP 工具
-        └──── 上传原理图/PCB → 看图 + 领域知识 → 判断 ────┘
-                          │
-                          ▼ 兜底
-                  obsidian-rag-mcp(训练未覆盖 / 需精确引用原文时检索)
+```powershell
+npm install -g .
+mtb
 ```
 
-编排原则：**MCP 统一总线 + 模块松耦合**。模块之间通过 MCP / CLI / API 边界通信，
-不做深度代码耦合 —— 既满足许可证隔离，也让每块可独立演进。
+The supported installation and management channels are:
 
-## 🧩 模块一览
+- **npm, all platforms:** `npm install -g modeltoolbox` after a published release,
+	or `npm install -g .` from this checkout.
+- **PowerShell on Windows:** use the same npm command. Node.js 18 or newer and
+	Python 3.11 or newer are required; `MODELTOOLBOX_PYTHON` can select a specific
+	Python executable.
+- **macOS/Linux:** use the same npm command from a shell. The bootstrap does not
+	require `sudo` because the Python environment is kept inside the package
+	checkout; npm itself may require the normal global-prefix permissions.
+- **pipx, all platforms:** `pipx install .` from a checkout, then manage it with
+	`pipx upgrade modeltoolbox` and `pipx uninstall modeltoolbox`.
+- **uv, all platforms:** `uv tool install .` from a checkout, then manage it with
+	`uv tool upgrade modeltoolbox` and `uv tool uninstall modeltoolbox`.
 
-| 模块 | 职责 | 形态 | 许可证 |
-|------|------|------|--------|
-| **ModelIngest** | 原始文档（PDF/Word/Excel/PPT/图片）→ Markdown，保留本地原件 | CLI (+MCP) | MIT |
-| **ModelProvider** | 统一闭源大模型接口：OpenAI / Anthropic / Gemini / DeepSeek（+本地 Ollama） | 库 / API | MIT |
-| **ModelTraining** | 小样本多模态微调（Gemma 视觉），导出 GGUF | CLI / Studio | AGPL-3.0 · unsloth 派生 |
-| **ModelMCP** | 给模型的硬件工具手：Altium / LTspice / Obsidian-RAG 等 MCP server | MCP | 各服务器独立 |
-| **ModelMemory** | 跨会话记忆 + 代码知识图谱审查 | MCP / Action | 见模块 |
-| **ModelSkill** | 私有 Skill registry 与自动路由 | Plugin | MIT |
-| **ModelOffice** | 代码执行 / 沙箱与 SDK | SDK | Apache-2.0 · e2b 派生 |
-| **ObsidianRag** | 知识库语料（训练语料源 · 检索源） | 数据 | 内容各自版权 |
+Homebrew and WinGet manifests are not published yet, so those commands are not
+advertised as working installation channels. Adding either requires a released,
+versioned artifact plus a formula or manifest in the external package-manager
+repository.
 
-> 命名约定：产品外壳统一 `Model*` 体系；**上游开源库（unsloth / e2b 等）内部命名与版权署名一律保留**。
+Lifecycle commands:
 
-## 🚀 快速开始
-
-> 🚧 项目开发中。各模块的详细安装见对应目录的 `README.md`。
-
-```bash
-# 1. 文档转语料（原件留本地，不上传）
-#    cd ModelIngest && ...
-
-# 2. 合成训练数据（需配置闭源 API 密钥，见 ModelProvider/.env.example）
-#    cd ModelProvider && ...
-
-# 3. 微调并导出 GGUF(+mmproj)
-#    cd ModelTraining && ...
-
-# 4. 本地承载
-#    ollama create my-hw-vlm -f Modelfile && ollama serve
-
-# 5. 使用：VSCode Copilot 选本地模型，或走 localhost:11434 API
+```powershell
+mtb version
+mtb doctor
+npm update -g modeltoolbox
+npm uninstall -g modeltoolbox
 ```
 
-详见 [`docs/architecture.md`](docs/architecture.md)。
+## Commit And Push
 
-## 📄 许可证
+The repository includes a guarded PowerShell helper. It always uses the current
+branch, never creates a branch, and records commits as `lbxAOA`:
 
-本仓库为**多许可证**工程，各模块 license 隔离，互不传染。根编排 / 胶水代码采用
-[MIT](LICENSE)；派生自开源项目的模块（ModelTraining←unsloth AGPL-3.0，
-ModelOffice←e2b Apache-2.0 等）**沿用其原始许可证并保留版权署名**。完整映射见
-[`LICENSES.md`](LICENSES.md)。
+```powershell
+.\scripts\commit-modeltoolbox.ps1 -Message "chore: sync refactor"
+```
+
+It stages all changes, rejects likely secrets, checks whitespace, and refuses
+more than five deleted files unless the larger refactor was reviewed explicitly:
+
+```powershell
+.\scripts\commit-modeltoolbox.ps1 -Message "chore: sync refactor" -AllowLargeDeletion
+```
+
+Use `-NoPush` to create the local commit without pushing. By default the script
+pushes the current `HEAD` to the existing `origin/main` branch without changing
+or creating a local branch. Use `-RemoteBranch <name>` only for another branch
+that already exists on `origin`; the script refuses to create remote branches.
+
+For a checkout-based install, update and repair the editable environment with:
+
+```powershell
+npm run update
+npm run bootstrap
+```
+
+To pin a published release, use npm's normal version selector, for example
+`npm install -g modeltoolbox@0.1.0`. To install a local prerelease or roll back,
+pass the corresponding checkout or package version to `npm install -g`.
+
+The npm package exposes the `mtb` command and runs its install bootstrap during
+installation when npm install scripts are allowed. That bootstrap creates or
+reuses `.venv`, installs this Python workspace in editable mode, and then the npm
+command launches the Python `mtb` control plane. If your npm policy blocks
+`postinstall`, run `mtb` anyway; the launcher performs the same bootstrap on
+first use when needed.
+
+For local development, you can also run the npm-managed terminal from the
+repository root:
+
+```powershell
+npm run bootstrap
+npm start
+```
+
+After bootstrap, npm can also forward any `mtb` command:
+
+```powershell
+npm run mtb -- doctor
+npm run mtb -- provider list --json
+```
+
+Python-only install is still supported:
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -e .
+```
+
+Then run:
+
+```powershell
+mtb
+mtb --help
+mtb doctor
+```
+
+`mtb` self-bootstraps the local `.venv` on first use if npm lifecycle scripts
+were disabled. `mtb doctor` is the first troubleshooting command; it reports
+the Python runtime, current directory, and installed package version without
+printing credentials or environment values.
+
+Running bare `mtb` opens the interactive ModelToolbox terminal. Type `help` to
+see commands and `exit` to quit.
+
+## Security And Local State
+
+Obsidian's Local REST API state is machine-local and is intentionally ignored by
+Git. Never commit its `data.json`, API keys, certificates, or private keys. If
+credentials from an earlier checkout were exposed, revoke and regenerate the
+API key and recreate the TLS certificate/private key pair in Obsidian; deleting
+the local file does not invalidate credentials that were already issued.
+
+## Command Overview
+
+```powershell
+mtb guard git-deletions --max-deleted 5
+mtb ingest build --source docs --output vault/docs
+mtb memory index . --include .py
+mtb memory search "provider routing"
+mtb provider list --json
+mtb provider runtime list --json
+mtb office env create demo
+mtb office exec demo python -c "print('ok')"
+mtb skill build-from vault/docs --name docs-skill
+mtb mcp discover
+mtb mcp export
+mtb train data dataset.jsonl
+mtb train plan dataset.jsonl --arch tiny-decoder
+```
+
+## Refactor Status
+
+The new MIT-owned CLI path is being built beside legacy code. Do not restore deleted files from GitHub history during this refactor. Legacy vendored training and sandbox code must be removed or isolated before the whole repository can be declared pure MIT.
+
+## License
+
+The first-party ModelToolbox code is intended to be MIT. Existing third-party-derived legacy directories keep their original licenses until removed or replaced. See `THIRD_PARTY.md` for the active audit.

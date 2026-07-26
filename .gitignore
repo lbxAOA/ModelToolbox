@@ -32,6 +32,9 @@ out/
 *.key
 *.pem
 secrets.json
+**/.obsidian/plugins/obsidian-local-rest-api/data.json
+**/.obsidian/workspace.json
+**/.obsidian/workspace-mobile.json
 
 # ── Model weights & artifacts (never commit) ────────────────
 *.gguf
@@ -74,6 +77,7 @@ lancedb/
 *.sqlite3
 
 # ── ModelIngest incremental manifest cache ──────────────────
+.modeltoolbox/
 .ingest_cache/
 ingest_manifest.sqlite
 .distill_cache/
