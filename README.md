@@ -53,27 +53,6 @@ npm update -g modeltoolbox
 npm uninstall -g modeltoolbox
 ```
 
-## Commit And Push
-
-The repository includes a guarded PowerShell helper. It always uses the current
-branch, never creates a branch, and records commits as `lbxAOA`:
-
-```powershell
-.\scripts\commit-modeltoolbox.ps1 -Message "chore: sync refactor"
-```
-
-It stages all changes, rejects likely secrets, checks whitespace, and refuses
-more than five deleted files unless the larger refactor was reviewed explicitly:
-
-```powershell
-.\scripts\commit-modeltoolbox.ps1 -Message "chore: sync refactor" -AllowLargeDeletion
-```
-
-Use `-NoPush` to create the local commit without pushing. By default the script
-pushes the current `HEAD` to the existing `origin/main` branch without changing
-or creating a local branch. Use `-RemoteBranch <name>` only for another branch
-that already exists on `origin`; the script refuses to create remote branches.
-
 For a checkout-based install, update and repair the editable environment with:
 
 ```powershell

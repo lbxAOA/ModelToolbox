@@ -84,6 +84,7 @@ ingest_manifest.sqlite
 
 # ── Local-only commit/push helper scripts (never publish) ───
 push-to-main.ps1
+scripts/commit-modeltoolbox.ps1
 
 # ── OS / editor ─────────────────────────────────────────────
 .DS_Store

@@ -55,3 +55,59 @@ fix(office): reject path traversal cwd
 docs: update refactor status
 chore(repo): tighten package discovery
 ```
+
+## Contribution Workflow
+
+Use the standard GitHub fork and pull request workflow. Do not push changes
+directly to `main`.
+
+### 1. Fork And Clone
+
+Fork the repository on GitHub and clone your fork.
+
+```powershell
+git clone https://github.com/<your-username>/ModelToolbox.git
+cd ModelToolbox
+git remote add upstream https://github.com/<upstream-owner>/ModelToolbox.git
+```
+
+### 2. Create A Branch
+
+Sync `main` and create a focused branch for the change.
+
+```powershell
+git fetch upstream
+git switch main
+git merge --ff-only upstream/main
+git switch -c feat/short-description
+```
+
+### 3. Validate And Commit
+
+Make the change, run the relevant validation, and review the diff before
+committing.
+
+```powershell
+git status
+git diff --check
+git diff
+git add <files>
+git commit -m "feat(scope): short description"
+```
+
+### 4. Push And Open A Pull Request
+
+Push the branch to your fork and open a pull request against the upstream
+repository's `main` branch.
+
+```powershell
+git push --set-upstream origin feat/short-description
+```
+
+Keep the pull request focused, explain what changed and why, and include the
+validation commands you ran. Link related issues with `Closes #<issue-number>`
+when applicable. Address review feedback with additional commits; maintainers
+may squash commits when merging.
+
+Repository collaborators may create the branch in the upstream repository
+instead of a fork, but must still submit changes through a pull request.
