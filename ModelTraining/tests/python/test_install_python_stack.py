@@ -142,9 +142,9 @@ class TestUvSafePathHardening:
 
         overrides = tmp_path / "Open Source" / "overrides-darwin-arm64.txt"
         overrides.parent.mkdir(parents = True)
-        overrides.write_text("transformers>=4.57.6\n")
+        overrides.write_text("transformers>=5.5.0\n")
 
         value = uvps.uv_safe_path(overrides)
 
         assert " " not in value
-        assert Path(value).read_text() == "transformers>=4.57.6\n"
+        assert Path(value).read_text() == "transformers>=5.5.0\n"
