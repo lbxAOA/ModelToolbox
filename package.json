@@ -3,9 +3,17 @@
   "version": "0.1.0",
   "description": "npm-managed terminal entry for ModelToolbox.",
   "license": "MIT",
+  "homepage": "https://github.com/lbxAOA/ModelToolbox#readme",
+  "bugs": {
+    "url": "https://github.com/lbxAOA/ModelToolbox/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/lbxAOA/ModelToolbox.git"
+  },
   "type": "commonjs",
   "bin": {
-    "mtb": "./npm/mtb.cjs"
+    "mtb": "npm/mtb.cjs"
   },
   "files": [
     "ModelCore/",
@@ -37,5 +45,9 @@
   },
   "engines": {
     "node": ">=18"
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
   }
 }

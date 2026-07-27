@@ -17,32 +17,28 @@ The refactor target is one Python workspace with a single `mtb` command. Each `M
 
 ## Install
 
-Install the terminal app globally from this checkout:
+ModelToolbox is distributed through npm. Install it globally on Windows,
+macOS, or Linux:
 
 ```powershell
-npm install -g .
-mtb
+npm install -g modeltoolbox
 ```
 
-The supported installation and management channels are:
+Requirements:
 
-- **npm, all platforms:** `npm install -g modeltoolbox` after a published release,
-	or `npm install -g .` from this checkout.
-- **PowerShell on Windows:** use the same npm command. Node.js 18 or newer and
-	Python 3.11 or newer are required; `MODELTOOLBOX_PYTHON` can select a specific
-	Python executable.
-- **macOS/Linux:** use the same npm command from a shell. The bootstrap does not
-	require `sudo` because the Python environment is kept inside the package
-	checkout; npm itself may require the normal global-prefix permissions.
-- **pipx, all platforms:** `pipx install .` from a checkout, then manage it with
-	`pipx upgrade modeltoolbox` and `pipx uninstall modeltoolbox`.
-- **uv, all platforms:** `uv tool install .` from a checkout, then manage it with
-	`uv tool upgrade modeltoolbox` and `uv tool uninstall modeltoolbox`.
+- Node.js 18 or newer
+- Python 3.11 or newer
 
-Homebrew and WinGet manifests are not published yet, so those commands are not
-advertised as working installation channels. Adding either requires a released,
-versioned artifact plus a formula or manifest in the external package-manager
-repository.
+On Windows, set `MODELTOOLBOX_PYTHON` before installation to select a specific
+Python executable when needed. The package otherwise prefers the Python 3.11
+launcher and falls back to `python`.
+
+Verify the installation:
+
+```powershell
+mtb --help
+mtb doctor
+```
 
 Lifecycle commands:
 
@@ -53,53 +49,14 @@ npm update -g modeltoolbox
 npm uninstall -g modeltoolbox
 ```
 
-For a checkout-based install, update and repair the editable environment with:
-
-```powershell
-npm run update
-npm run bootstrap
-```
-
-To pin a published release, use npm's normal version selector, for example
-`npm install -g modeltoolbox@0.1.0`. To install a local prerelease or roll back,
-pass the corresponding checkout or package version to `npm install -g`.
+To pin or roll back to a release, use npm's normal version selector, for example
+`npm install -g modeltoolbox@0.1.0`.
 
 The npm package exposes the `mtb` command and runs its install bootstrap during
-installation when npm install scripts are allowed. That bootstrap creates or
-reuses `.venv`, installs this Python workspace in editable mode, and then the npm
-command launches the Python `mtb` control plane. If your npm policy blocks
-`postinstall`, run `mtb` anyway; the launcher performs the same bootstrap on
-first use when needed.
-
-For local development, you can also run the npm-managed terminal from the
-repository root:
-
-```powershell
-npm run bootstrap
-npm start
-```
-
-After bootstrap, npm can also forward any `mtb` command:
-
-```powershell
-npm run mtb -- doctor
-npm run mtb -- provider list --json
-```
-
-Python-only install is still supported:
-
-```powershell
-python -m venv .venv
-.\.venv\Scripts\python.exe -m pip install -e .
-```
-
-Then run:
-
-```powershell
-mtb
-mtb --help
-mtb doctor
-```
+installation when npm install scripts are allowed. The bootstrap creates or
+reuses a private `.venv` inside the installed package and installs the bundled
+Python workspace. If npm install scripts are disabled, the `mtb` launcher runs
+the same bootstrap on first use.
 
 `mtb` self-bootstraps the local `.venv` on first use if npm lifecycle scripts
 were disabled. `mtb doctor` is the first troubleshooting command; it reports
