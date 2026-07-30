@@ -88,9 +88,42 @@ mtb office exec demo python -c "print('ok')"
 mtb skill build-from vault/docs --name docs-skill
 mtb mcp discover
 mtb mcp export
-mtb train data dataset.jsonl
-mtb train plan dataset.jsonl --arch tiny-decoder
+mtb train data dataset.jsonl --validate
+mtb train recommend dataset.jsonl --gpu-memory 24GB
+mtb train estimate dataset.jsonl --arch llama2-7b --method lora
+mtb train plan dataset.jsonl --arch llama2-7b --output ./runs/exp1
+mtb train generate-config plan.json --format huggingface
+mtb train export ./runs/exp1 --format gguf
 ```
+
+## ModelTraining Quick Start
+
+Validate and plan training for small-to-medium datasets:
+
+```powershell
+# Inspect dataset
+mtb train data dataset.jsonl
+
+# Validate format and quality
+mtb train data dataset.jsonl --validate
+
+# Get architecture recommendation
+mtb train recommend dataset.jsonl --gpu-memory 24GB
+
+# Estimate resources (GPU memory, time, cost)
+mtb train estimate dataset.jsonl --arch llama2-7b --method lora
+
+# Generate training plan
+mtb train plan dataset.jsonl --arch llama2-7b --output ./runs/exp1
+
+# Generate Hugging Face or Axolotl config
+mtb train generate-config plan.json --format huggingface --output config.json
+
+# Export model after training
+mtb train export ./runs/exp1 --format gguf
+```
+
+See [ModelTraining/README.md](ModelTraining/README.md) for detailed documentation.
 
 ## Refactor Status
 

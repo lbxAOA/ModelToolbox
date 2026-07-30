@@ -7,7 +7,19 @@ import typer
 
 from modeltoolbox_core.jsonio import dump_json
 
-from .core import ARCH_PRESETS, distill_plan, inspect_dataset, training_plan, write_export_manifest
+from .core import (
+    ARCH_PRESETS,
+    compute_stats,
+    distill_plan,
+    estimate_resources,
+    generate_axolotl_config,
+    generate_hf_config,
+    inspect_dataset,
+    recommend_architecture,
+    training_plan,
+    validate_dataset,
+    write_export_manifest,
+)
 
 app = typer.Typer(help="Train, distill, evaluate, and export small model architectures.")
 
@@ -35,19 +47,49 @@ def arch_command(
 @app.command("data")
 def data_command(
     dataset: Path = typer.Argument(..., help="Dataset file or directory."),
+    validate: bool = typer.Option(False, "--validate", help="Validate dataset format and quality."),
+    stats: bool = typer.Option(False, "--stats", help="Compute detailed statistics."),
+    strict: bool = typer.Option(False, "--strict", help="Treat warnings as errors in validation."),
+    verbose: bool = typer.Option(False, "--verbose", help="Verbose output."),
     json_output: bool = typer.Option(False, "--json", help="Print machine-readable JSON."),
 ) -> None:
     try:
-        info = inspect_dataset(dataset)
+        if validate:
+            result = validate_dataset(dataset, strict=strict)
+            if json_output:
+                dump_json(asdict(result))
+                return
+            typer.echo(f"status={result.status} samples={result.total_samples} duplicates={result.duplicates}")
+            if result.warnings:
+                typer.echo("Warnings:")
+                for warning in result.warnings[:10]:  # 限制显示数量
+                    typer.echo(f"  - {warning}")
+            if result.errors:
+                typer.echo("Errors:", err=True)
+                for error in result.errors[:10]:
+                    typer.echo(f"  - {error}", err=True)
+            if result.status == "error":
+                raise typer.Exit(1)
+        elif stats:
+            result = compute_stats(dataset, verbose=verbose)
+            if json_output:
+                payload = asdict(result)
+                dump_json(payload)
+                return
+            typer.echo(f"samples={result.total_samples} avg_length={result.avg_length:.1f} vocab={result.vocab_size_estimate}")
+            if verbose:
+                typer.echo(f"Percentiles: p50={result.length_percentiles['p50']} p90={result.length_percentiles['p90']} p99={result.length_percentiles['p99']}")
+        else:
+            info = inspect_dataset(dataset)
+            payload = asdict(info)
+            payload["path"] = str(info.path)
+            if json_output:
+                dump_json(payload)
+                return
+            typer.echo(f"files={info.files} examples={info.examples} bytes={info.bytes}")
     except ValueError as error:
         typer.echo(str(error), err=True)
         raise typer.Exit(1) from error
-    payload = asdict(info)
-    payload["path"] = str(info.path)
-    if json_output:
-        dump_json(payload)
-        return
-    typer.echo(f"files={info.files} examples={info.examples} bytes={info.bytes}")
 
 
 @app.command("plan")
@@ -59,6 +101,77 @@ def plan_command(
     try:
         dump_json(training_plan(dataset, arch=arch, output=output), pretty=True)
     except ValueError as error:
+        typer.echo(str(error), err=True)
+        raise typer.Exit(1) from error
+
+
+@app.command("recommend")
+def recommend_command(
+    dataset: Path = typer.Argument(..., help="Dataset file or directory."),
+    gpu_memory: str | None = typer.Option(None, "--gpu-memory", help="Available GPU memory (e.g., '24GB')."),
+    json_output: bool = typer.Option(False, "--json", help="Print machine-readable JSON."),
+) -> None:
+    try:
+        result = recommend_architecture(dataset, gpu_memory=gpu_memory)
+        if json_output:
+            dump_json(result)
+            return
+        typer.echo(f"Recommended: {result['recommended_model']} with {result['recommended_method']}")
+        typer.echo(f"Reason: {result['reason']}")
+        if result.get("alternatives"):
+            typer.echo("\nAlternatives:")
+            for alt in result["alternatives"]:
+                typer.echo(f"  - {alt['model']}: {alt['reason']}")
+    except ValueError as error:
+        typer.echo(str(error), err=True)
+        raise typer.Exit(1) from error
+
+
+@app.command("estimate")
+def estimate_command(
+    dataset: Path = typer.Argument(..., help="Dataset file or directory."),
+    arch: str = typer.Option("tiny-decoder", "--arch", help="Architecture preset."),
+    method: str = typer.Option("lora", "--method", help="Training method: lora, qlora, full."),
+    json_output: bool = typer.Option(False, "--json", help="Print machine-readable JSON."),
+) -> None:
+    try:
+        result = estimate_resources(dataset, arch=arch, method=method)
+        if json_output:
+            dump_json(result)
+            return
+        typer.echo(f"GPU Memory: {result['gpu_memory']['minimum']} (min) / {result['gpu_memory']['recommended']} (recommended)")
+        typer.echo(f"Training Time: {result['time_estimate']['total_hours']} hours (~{result['time_estimate']['total_minutes']} minutes)")
+        typer.echo(f"Estimated Cost: ${result['cost_estimate']['total_usd']} on {result['cost_estimate']['provider']}")
+        typer.echo(f"Model Params: {result['model_params_millions']}M (trainable: {result['trainable_params_millions']}M)")
+    except ValueError as error:
+        typer.echo(str(error), err=True)
+        raise typer.Exit(1) from error
+
+
+@app.command("generate-config")
+def generate_config_command(
+    plan_file: Path = typer.Argument(..., help="Training plan JSON file."),
+    format: str = typer.Option("huggingface", "--format", help="Config format: huggingface, axolotl."),
+    output: Path | None = typer.Option(None, "--output", "-o", help="Output config file."),
+) -> None:
+    try:
+        import json
+        plan = json.loads(plan_file.read_text(encoding="utf-8"))
+        
+        if format == "huggingface":
+            config = generate_hf_config(plan)
+        elif format == "axolotl":
+            config = generate_axolotl_config(plan)
+        else:
+            typer.echo(f"Unknown format: {format}", err=True)
+            raise typer.Exit(1)
+        
+        if output:
+            output.write_text(json.dumps(config, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+            typer.echo(f"Config written to {output}")
+        else:
+            dump_json(config, pretty=True)
+    except Exception as error:
         typer.echo(str(error), err=True)
         raise typer.Exit(1) from error
 

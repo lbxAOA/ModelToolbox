@@ -10,6 +10,7 @@ import typer
 from .git_guard import GitDeletionReport, inspect_git_deletions
 from .plugin import PluginLoadError, load_plugins
 from .shell import run_shell
+from .ux import register as register_ux
 
 app = typer.Typer(
     name="mtb",
@@ -94,6 +95,7 @@ def _print_deletion_report(report: GitDeletionReport) -> None:
 
 def main() -> None:
     register(app)
+    register_ux(app)  # 注册 UX 工具
     register_builtins(app)
     try:
         load_plugins(app, skip_names=BUILTIN_PLUGIN_NAMES)

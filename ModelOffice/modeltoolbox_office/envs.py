@@ -90,6 +90,102 @@ def install_packages(
     return run_command([str(env.python), "-m", "pip", "install", *packages], timeout=timeout)
 
 
+def clone_env(
+    source_name: str,
+    target_name: str,
+    *,
+    project_root: Path | None = None,
+    copy_workspace: bool = False,
+) -> OfficeEnv:
+    """Clone an existing environment.
+    
+    Args:
+        source_name: Source environment name
+        target_name: Target environment name
+        project_root: Optional project root
+        copy_workspace: If True, also copy workspace files
+        
+    Returns:
+        New cloned environment
+    """
+    source = get_env(source_name, project_root=project_root)
+    if not source.python.exists():
+        raise ValueError(f"Source environment not ready: {source_name}")
+    
+    target = create_env(target_name, project_root=project_root)
+    
+    # Get installed packages from source
+    result = run_command(
+        [str(source.python), "-m", "pip", "freeze"],
+        timeout=60,
+    )
+    
+    if result.returncode == 0 and result.stdout.strip():
+        packages = [line.strip() for line in result.stdout.strip().split("\n") if line.strip()]
+        if packages:
+            install_result = run_command(
+                [str(target.python), "-m", "pip", "install", *packages],
+                timeout=600,
+            )
+            if install_result.returncode != 0:
+                raise RuntimeError(f"Failed to install packages: {install_result.stderr}")
+    
+    # Optionally copy workspace
+    if copy_workspace and source.workspace.exists():
+        if target.workspace.exists():
+            shutil.rmtree(target.workspace)
+        shutil.copytree(source.workspace, target.workspace)
+    
+    return target
+
+
+def list_packages(name: str, *, project_root: Path | None = None) -> list[str]:
+    """List installed packages in an environment.
+    
+    Args:
+        name: Environment name
+        project_root: Optional project root
+        
+    Returns:
+        List of package specifiers (e.g., ["numpy==1.24.0"])
+    """
+    env = create_env(name, project_root=project_root)
+    result = run_command([str(env.python), "-m", "pip", "freeze"], timeout=60)
+    
+    if result.returncode != 0:
+        raise RuntimeError(f"Failed to list packages: {result.stderr}")
+    
+    return [line.strip() for line in result.stdout.strip().split("\n") if line.strip()]
+
+
+def uninstall_packages(
+    name: str,
+    packages: list[str],
+    *,
+    project_root: Path | None = None,
+    timeout: float = 300,
+) -> ProcessResult:
+    """Uninstall packages from an environment.
+    
+    Args:
+        name: Environment name
+        packages: Package names to uninstall
+        project_root: Optional project root
+        timeout: Operation timeout
+        
+    Returns:
+        Process result
+    """
+    if not packages:
+        raise ValueError("At least one package is required")
+    
+    env = create_env(name, project_root=project_root)
+    return run_command(
+        [str(env.python), "-m", "pip", "uninstall", "-y", *packages],
+        timeout=timeout,
+    )
+
+
 def env_to_json(env: OfficeEnv) -> dict[str, str | bool]:
     return {
         "name": env.name,
