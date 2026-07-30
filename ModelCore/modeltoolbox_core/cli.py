@@ -19,7 +19,7 @@ app = typer.Typer(
 )
 guard_app = typer.Typer(help="Repository safety checks.", no_args_is_help=True)
 BUILTIN_PLUGINS = (
-    "modeltoolbox_ingest.cli",
+    "modelingest_core.cli",
     "modeltoolbox_provider.cli",
     "modeltoolbox_office.cli",
     "modeltoolbox_memory.cli",

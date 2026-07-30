@@ -30,7 +30,14 @@ train = "modeltoolbox_training.cli:register"
 [tool.setuptools.packages.find]
 where = [
     "ModelCore",
-    "ModelIngest",
+    "ModelIngest/clean/src",
+    "ModelIngest/common/src",
+    "ModelIngest/core/src",
+    "ModelIngest/distill/src",
+    "ModelIngest/fetch/src",
+    "ModelIngest/organize/src",
+    "ModelIngest/parse/src",
+    "ModelIngest/render/src",
     "ModelProvider",
     "ModelOffice",
     "ModelMemory",
