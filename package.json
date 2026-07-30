@@ -1,6 +1,6 @@
 {
   "name": "modeltoolbox",
-  "version": "0.1.0",
+  "version": "0.1.5",
   "description": "npm-managed terminal entry for ModelToolbox.",
   "license": "MIT",
   "homepage": "https://github.com/lbxAOA/ModelToolbox#readme",
