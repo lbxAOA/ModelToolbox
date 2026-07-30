@@ -1,31 +1,50 @@
 [project]
 name = "modelingest"
-version = "0.1.0"
-description = "原始文档 (PDF/Word/Excel/PPT/图片) → Markdown 语料转换器，保留本地原件"
+version = "2.0.0"
+description = "多模态文档 → 结构化知识库转换器（视觉+文本双通道）"
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
 authors = [{ name = "lbxAOA" }]
+
+# 元包：依赖所有核心包
 dependencies = [
-    # markitdown 为首选引擎；[all] 覆盖 pdf/docx/xlsx/pptx/图片等。
-    "markitdown[all]>=0.0.1a2",
+    "modelingest-common>=2.0.0",
+    "modelingest-core>=2.0.0",
+    "modelingest-parse>=2.0.0",
+    "modelingest-clean>=2.0.0",
 ]
 
 [project.optional-dependencies]
-# PDF 页图抽取（多模态素材）。未安装则该功能优雅降级。
-pdf = ["PyMuPDF>=1.24"]
-# 阶段 A 复杂 PDF 解析器（可选，按需装其一即可；未装自动降级到 markitdown）。
-parse = ["docling>=2.0"]
-# 阶段 B 知识蒸馏：需 ModelProvider（同仓库兄弟包，用 `pip install -e ../ModelProvider` 安装）。
-distill = []
-dev = ["pytest>=8"]
+# 视觉处理
+visual = ["modelingest-render>=2.0.0"]
+
+# 内容获取
+fetch = ["modelingest-fetch>=2.0.0"]
+
+# 知识蒸馏
+distill = ["modelingest-distill>=2.0.0"]
+
+# 知识组织
+organize = ["modelingest-organize>=2.0.0"]
+
+# 完整功能
+all = [
+    "modelingest-render>=2.0.0",
+    "modelingest-fetch>=2.0.0",
+    "modelingest-distill>=2.0.0",
+    "modelingest-organize>=2.0.0",
+]
+
+# 开发依赖
+dev = [
+    "pytest>=8",
+    "pytest-cov>=4",
+]
 
 [project.scripts]
-modelingest = "modelingest.cli:main"
+modelingest = "modelingest_core.cli:main"
 
 [build-system]
 requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
-
-[tool.setuptools.packages.find]
-include = ["modelingest*"]
