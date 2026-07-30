@@ -48,7 +48,6 @@
     "start": "node ./npm/mtb.cjs",
     "mtb": "node ./npm/mtb.cjs",
     "doctor": "node ./npm/mtb.cjs doctor",
-    "version": "node ./npm/mtb.cjs version",
     "update": "npm install -g .",
     "uninstall": "npm uninstall -g modeltoolbox"
   },

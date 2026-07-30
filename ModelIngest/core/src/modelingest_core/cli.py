@@ -343,76 +343,50 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
-    if args.visual:
-        config.stages.insert(0, "render")
-        config.stage_configs["render"] = StageConfig(
-            enabled=True,
-            config={
-                "mode": "tiles",
-                "tile_width": 1024,
-                "tile_height": 1024,
-                "overlap": 100,
-            }
-        )
-    
-    # 导出配置文件
-    config.to_yaml(args.output)
-    
-    print(f"✓ 配置文件已生成: {args.output}")
-    print(f"\n使用方式:")
-    print(f"  modelingest build --config {args.output}")
-    
-    return 0
-
-
-def cmd_render(args) -> int:
-    """执行 render 命令。"""
-    from modelingest_render import RenderStage
-    from modelingest_core import StageInput
-    
-    print(f"▶ 渲染: {args.source}")
-    
-    stage = RenderStage()
-    input_data = StageInput(
-        source_path=args.source,
-        metadata={},
-        config={
-            "mode": args.mode,
-            "output_root": args.output,
-        }
-    )
-    
-    output = stage.run(input_data)
-    
-    print(f"✓ 渲染完成: {output.stats}")
-    
-    return 0
-
-
-def cmd_parse(args) -> int:
-    """执行 parse 命令。"""
-    from modelingest_parse import ParseStage
-    from modelingest_core import StageInput
-    
-    print(f"▶ 解析: {args.source}")
-    
-    stage = ParseStage()
-    input_data = StageInput(
-        source_path=args.source,
-        metadata={},
-        config={
-            "output_root": args.output,
-            "parsers": args.parsers,
-        }
-    )
-    
-    output = stage.run(input_data)
-    
-    print(f"✓ 解析完成: {output.stats}")
-    
-    return 0
-
-
-if __name__ == "__main__":
     sys.exit(main())
+
+
+def register(root: typer.Typer) -> None:
+    """注册 ModelIngest CLI 到 ModelToolbox 主命令。"""
+    try:
+        import typer
+    except ImportError:
+        return
+
+    ingest_app = typer.Typer(
+        name="ingest",
+        help="多模态文档 → 结构化知识库转换器",
+        no_args_is_help=True,
+    )
+
+    @ingest_app.command("build")
+    def build(
+        source: Path = typer.Option(..., "--source", "-s", help="输入源：URL 或本地目录"),
+        output: Path = typer.Option(..., "--output", "-o", help="输出知识库目录"),
+        config: Path = typer.Option(None, "--config", help="配置文件路径（可选）"),
+        visual: bool = typer.Option(False, "--visual", help="启用视觉渲染（网页截图）"),
+        distill: bool = typer.Option(False, "--distill", help="启用知识蒸馏（需要 LLM）"),
+        overwrite: bool = typer.Option(False, "--overwrite", help="覆盖已存在的文件"),
+        domain: str = typer.Option("通用", "--domain", help="知识领域（影响蒸馏配置）"),
+    ) -> None:
+        """端到端构建知识库（推荐）"""
+        from .handlers import handle_build
+        import argparse
+
+        args = argparse.Namespace(
+            source=source,
+            output=output,
+            config=config,
+            visual=visual,
+            distill=distill,
+            overwrite=overwrite,
+            domain=domain,
+        )
+        handle_build(args)
+
+    @ingest_app.command("version")
+    def version() -> None:
+        """显示 ModelIngest 版本"""
+        typer.echo("ModelIngest 2.0.0")
+
+    root.add_typer(ingest_app, name="ingest")
