@@ -237,7 +237,3 @@ class OllamaProvider:
             self._client.close()
         except Exception:
             pass
-
-            for embedding in embeddings
-            if isinstance(embedding, list)
-        ]
