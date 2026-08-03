@@ -32,6 +32,12 @@ out/
 *.key
 *.pem
 secrets.json
+**/.obsidian/plugins/obsidian-local-rest-api/data.json
+**/.obsidian/workspace.json
+**/.obsidian/workspace-mobile.json
+
+# ── Personal automation scripts ─────────────────────────────
+scripts/
 
 # ── Model weights & artifacts (never commit) ────────────────
 *.gguf
@@ -74,12 +80,15 @@ lancedb/
 *.sqlite3
 
 # ── ModelIngest incremental manifest cache ──────────────────
+.modeltoolbox/
 .ingest_cache/
 ingest_manifest.sqlite
 .distill_cache/
 
 # ── Local-only commit/push helper scripts (never publish) ───
 push-to-main.ps1
+scripts/commit-modeltoolbox.ps1
+scripts/publish-npm.ps1
 
 # ── OS / editor ─────────────────────────────────────────────
 .DS_Store

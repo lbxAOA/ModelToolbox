@@ -1694,6 +1694,35 @@ async def add_schematic_text(ctx: Context, items: list) -> str:
         return json.dumps({"success": False, "error": response.get("error", "Unknown error")})
     return json.dumps(response.get("result", {}), indent=2)
 
+
+@mcp.tool()
+async def health_check(ctx: Context) -> str:
+    """
+    Perform a health check on the Altium MCP server.
+    
+    Returns:
+        str: JSON object with health status including configuration state,
+             Altium executable availability, and exchange directory status.
+    """
+    from modeltoolbox_core.mcp_logging import create_health_check_tool
+    
+    health_func = create_health_check_tool("altium-mcp")
+    base_health = health_func()
+    
+    # Add Altium-specific checks
+    altium_health = {
+        **base_health,
+        "altium_exe_configured": bool(altium_bridge.config.altium_exe_path),
+        "altium_exe_exists": Path(altium_bridge.config.altium_exe_path).exists() if altium_bridge.config.altium_exe_path else False,
+        "script_path": str(altium_bridge.config.script_path),
+        "script_exists": Path(altium_bridge.config.script_path).exists(),
+        "exchange_dir": str(EXCHANGE_DIR),
+        "exchange_dir_writable": os.access(EXCHANGE_DIR, os.W_OK),
+    }
+    
+    return json.dumps(altium_health, indent=2)
+
+
 if __name__ == "__main__":
     logger.info("Starting Altium MCP Server...")
     logger.info(f"Using MCP directory: {MCP_DIR}")

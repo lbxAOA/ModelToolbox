@@ -43,5 +43,46 @@ async def run_ach_roundtable(problem: str, max_hypotheses: int = 5, max_evidence
     return matrix.render_markdown()
 
 
+@mcp.tool()
+def health_check() -> dict:
+    """Perform a health check on the ACH Roundtable MCP server.
+    
+    Returns:
+        Health status including Ollama availability and model configuration.
+    """
+    from modeltoolbox_core.mcp_logging import create_health_check_tool
+    import subprocess
+    
+    health_func = create_health_check_tool("ach-roundtable-mcp")
+    base_health = health_func()
+    
+    # Check if Ollama is available
+    ollama_available = False
+    ollama_models = []
+    try:
+        result = subprocess.run(
+            ["ollama", "list"],
+            capture_output=True,
+            text=True,
+            timeout=5
+        )
+        ollama_available = result.returncode == 0
+        if ollama_available:
+            # Parse model list (skip header line)
+            lines = result.stdout.strip().split('\n')[1:]
+            ollama_models = [line.split()[0] for line in lines if line.strip()]
+    except Exception:
+        pass
+    
+    ach_health = {
+        **base_health,
+        "ollama_available": ollama_available,
+        "ollama_models": ollama_models,
+        "required_model": "gemma2:9b (default, configurable in agents.py)",
+    }
+    
+    return ach_health
+
+
 if __name__ == "__main__":
     mcp.run()

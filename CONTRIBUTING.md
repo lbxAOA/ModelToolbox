@@ -1,51 +1,113 @@
-# 贡献指南 (Contributing)
+# Contributing
 
-感谢参与 ModelToolbox。本文档约定工程规范，确保多模块协作一致。
+ModelToolbox is being refactored into a terminal-first multi-package workspace with one `mtb` CLI. Keep changes small, module-scoped, and compatible with that direction.
 
-## 仓库结构
+## Repository Boundaries
 
-```
-ModelToolbox/
-├── ModelIngest/     文档 → md 语料（保留本地原件）
-├── ModelProvider/   闭源大模型统一接口
-├── ModelTraining/   小样本多模态微调（AGPL, unsloth 派生）
-├── ModelMCP/        硬件等 MCP server
-├── ModelMemory/     记忆 + 代码知识图谱
-├── ModelSkill/      私有 Skill registry
-├── ModelOffice/     执行 / 沙箱（Apache, e2b 派生）
-├── ObsidianRag/     知识库语料
-├── orchestrator/    顶层编排（MCP 聚合 / persona / bootstrap）
-└── docs/            架构文档
-```
+- `ModelCore` owns shared infrastructure only: CLI registration, configuration, path guards, process execution, JSON output, SQLite helpers, and Git deletion protection.
+- `ModelIngest` converts web/local sources into organized Markdown libraries.
+- `ModelProvider` owns model API and agent runtime routing.
+- `ModelOffice` owns local sandbox environments.
+- `ModelMemory` owns local indexing/search context.
+- `ModelMCP` owns MCP registry, scaffolds, and config exports.
+- `ModelSkill` owns skill discovery and generation from Markdown libraries.
+- `ModelTraining` owns self-authored training plans, distillation specs, and export flows.
 
-## 硬性规则
+Do not couple modules through direct imports except through `ModelCore` or an explicitly documented package API.
 
-1. **不提交原始文档与大文件**：PDF / Word / Excel / 模型权重（`*.gguf`/`*.safetensors`）
-   等一律由 `.gitignore` 排除，只提交转换后的 `*.md` 与代码。
-2. **不提交密钥**：API key 走 `.env`（已忽略），仓库内仅保留 `.env.example`。
-3. **不提交虚拟环境 / 依赖目录**：`.venv/`、`node_modules/`、`__pycache__/`。
-4. **许可证边界**：跨模块调用走 MCP / CLI / API，避免直接 `import` 造成 license 耦合
-   （尤其不要 `import` ModelTraining 的 AGPL 代码到 MIT 模块）。
-5. **命名规范**：新模块沿用 `Model*` 前缀；不要重命名上游开源库的内部包名与版权。
+## Development Setup
 
-## 提交规范
-
-采用 Conventional Commits：
-
-```
-feat(ingest): 新增 xlsx 转 md 表格支持
-fix(provider): 修复 Anthropic 超时重试
-docs: 更新架构图
-chore(repo): 清理误跟踪的 .venv
+```powershell
+python -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -e .
+mtb --help
+mtb doctor
 ```
 
-- 每次提交聚焦单一模块 / 单一关注点。
-- 分支：`feat/*`、`fix/*`、`agents/*`；通过 PR 合入 `main`。
+## Safety Rules
 
-## 本地校验
+- Do not restore missing files from GitHub history during the v2 refactor unless the project owner explicitly asks for that exact recovery.
+- Do not use `git reset --hard`, `git checkout --`, or other destructive commands to clean the tree.
+- Run `mtb guard git-deletions --max-deleted 5` before publishing changes.
+- Do not commit secrets, virtual environments, dependency folders, model weights, or raw private documents.
+- Do not add vendored GPL, AGPL, or unclear-license code to first-party modules.
+- Keep generated state under `.modeltoolbox/`.
 
-提交前请确认：
+## Validation
 
-- [ ] 无原始文档 / 权重 / 密钥被加入暂存区（`git status` 核对）
-- [ ] 改动限定在目标模块，未触碰上游库内部与版权头
-- [ ] README / docs 与改动同步
+For code changes, run the narrowest relevant check first, then a broader smoke test when practical:
+
+```powershell
+python -m compileall ModelCore ModelIngest ModelProvider ModelOffice ModelMemory ModelMCP ModelSkill ModelTraining
+mtb --help
+mtb doctor
+```
+
+For license-sensitive changes, run the dependency license check used by CI and update `THIRD_PARTY.md` when the boundary changes.
+
+## Commit Style
+
+Use Conventional Commits and keep each commit focused:
+
+```text
+feat(memory): add sqlite fts index command
+fix(office): reject path traversal cwd
+docs: update refactor status
+chore(repo): tighten package discovery
+```
+
+## Contribution Workflow
+
+Use the standard GitHub fork and pull request workflow. Do not push changes
+directly to `main`.
+
+### 1. Fork And Clone
+
+Fork the repository on GitHub and clone your fork.
+
+```powershell
+git clone https://github.com/<your-username>/ModelToolbox.git
+cd ModelToolbox
+git remote add upstream https://github.com/<upstream-owner>/ModelToolbox.git
+```
+
+### 2. Create A Branch
+
+Sync `main` and create a focused branch for the change.
+
+```powershell
+git fetch upstream
+git switch main
+git merge --ff-only upstream/main
+git switch -c feat/short-description
+```
+
+### 3. Validate And Commit
+
+Make the change, run the relevant validation, and review the diff before
+committing.
+
+```powershell
+git status
+git diff --check
+git diff
+git add <files>
+git commit -m "feat(scope): short description"
+```
+
+### 4. Push And Open A Pull Request
+
+Push the branch to your fork and open a pull request against the upstream
+repository's `main` branch.
+
+```powershell
+git push --set-upstream origin feat/short-description
+```
+
+Keep the pull request focused, explain what changed and why, and include the
+validation commands you ran. Link related issues with `Closes #<issue-number>`
+when applicable. Address review feedback with additional commits; maintainers
+may squash commits when merging.
+
+Repository collaborators may create the branch in the upstream repository
+instead of a fork, but must still submit changes through a pull request.

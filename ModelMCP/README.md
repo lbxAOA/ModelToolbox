@@ -1,20 +1,85 @@
 # ModelMCP
 
-给模型的**工具手**：一组 MCP (Model Context Protocol) server，让模型能连接并操作第三方工具，
-以硬件 / 电子设计为主。
+MCP server management and registry for ModelToolbox.
 
-## 子服务器
+## Structure
 
-| 目录 | 作用 | 状态 |
-|------|------|------|
-| `altium-mcp/` | 从模型控制 Altium Designer：查元件、建符号 / 封装、布局、输出 | 已有 |
-| `ach-roundtable-mcp/` | ACH（竞争性假设分析）多智能体圆桌 | 已有 |
-| `ltspice/` | LTspice 电路仿真：读写 .asc、改参数、跑仿真、读回工作点 / 波形 | 🚧 待实现 |
-| `obsidian-rag-mcp/` | 对 ObsidianRag 语料的检索（RAG 兜底）：search / get-note | 🚧 待实现 |
+```
+ModelMCP/
+  pyproject.toml           # Aggregator package
+  modeltoolbox_mcp/        # Management CLI
+  packages/                # Individual MCP servers (future location)
+    ltspice-mcp/
+    obsidian-rag-mcp/
+    altium-mcp/
+    ach-roundtable-mcp/
+```
 
-## 定位
+## Current Structure (Legacy)
 
-在 ModelToolbox 中，ModelMCP 提供「模型看得见图之后还能动手」的能力 —— 训练让模型**懂**硬件，
-MCP 让它能**操作**硬件工具链。通过顶层 `orchestrator` 聚合进 MCP 总线。
+MCP servers are currently in the root directory. They will be moved to `packages/` in Phase 3.
 
-> 许可证：各子服务器独立，详见各自目录与根 `LICENSES.md`。
+## Individual MCP Servers
+
+### ltspice-mcp (v0.1.0)
+LTspice circuit simulation and analysis.
+
+### obsidian-rag-mcp (v0.1.0)
+Obsidian vault RAG indexing and search.
+
+### altium-mcp (v0.5.0)
+Altium Designer PCB automation.
+
+### ach-roundtable-mcp (v0.5.0)
+Multi-agent collaboration using AutoGen.
+
+## Installation
+
+Install the management layer:
+```bash
+pip install modeltoolbox-mcp
+```
+
+Install with specific servers:
+```bash
+pip install "modeltoolbox-mcp[ltspice,obsidian-rag]"
+```
+
+Install all servers:
+```bash
+pip install "modeltoolbox-mcp[all]"
+```
+
+## Usage
+
+### List MCP Servers
+```bash
+mtb mcp list
+```
+
+### Scaffold New Server
+```bash
+mtb mcp scaffold my-server
+```
+
+### Register Server
+```bash
+mtb mcp register ./my-server
+```
+
+## Development
+
+Run tests:
+```bash
+pytest ModelMCP/tests/
+```
+
+## Version History
+
+- **0.5.0**: Unified version for altium-mcp and ach-roundtable-mcp
+- **0.2.0**: Management layer with independent packaging
+- **0.1.0**: Initial individual server releases
+
+## License
+
+MIT

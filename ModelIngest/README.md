@@ -1,162 +1,377 @@
 # ModelIngest
 
-原始文档 → **结构化知识库**的两段式管线。
+> 多模态文档 → 结构化知识库转换器
 
-- **阶段 A 前置（crawl，可选）**：抓取公开网页 / 文件到本地，产物是原始 `.html`/`.pdf`/...，
-  与本地文档一视同仁，随后交给 parse 正常转换。
-- **阶段 A（parse）**：把 PDF / Word / Excel / PPT / 图片等统一转成带溯源信息的干净 `.md`，
-  **保留本地原件（不上传）**。
-- **阶段 B（distill）**：把干净 md 蒸馏成**结构化原子笔记**（一概念一卡片，固定 schema），
-  并自动建 `[[wikilink]]` + 生成 MOC，产出像 `ObsidianRag/Algorithms/*.md` 那样的知识库。
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 
-下游消费：
-- **ModelTraining 阶段0 数据合成** —— 用卡片 + PDF 页图合成训练样本
-- **obsidian-rag-mcp** —— 检索兜底
+ModelIngest 是一个强大的文档处理工具，采用独立包架构，支持将各种格式的文档（PDF、Word、HTML 等）转换为结构化的 Obsidian 知识库，并支持视觉+文本双通道处理。
 
-## 设计要点
+## ✨ 特性
 
-### 阶段 A 前置 —— crawl（可选）
+- 📄 **多格式支持**：PDF、DOCX、XLSX、PPTX、HTML 等
+- � **网页爬取**：支持网站内容抓取（零依赖，基于 urllib）
+- 🎨 **视觉渲染**：使用 Playwright 和 PyMuPDF 渲染网页/PDF 为截图
+- 🔄 **增量处理**：基于 SHA256，只处理变更文件
+- 🧠 **知识蒸馏**：通过 LLM 提炼原子笔记
+- 🔗 **自动建链**：生成 wikilink 和 MOC
+- 🏗️ **模块化架构**：独立包设计，清晰解耦
+- 🎯 **解析器注册表**：插件式架构，易于扩展
 
-| 维度 | 做法 |
-|------|------|
-| 定位 | 只做「抓取 + 落盘」，不做解析；抓下来的原始文件写入 `--output`（通常是某个 source 目录），随后用 `modelingest run` 像本地文档一样正常转换 |
-| 依赖 | 零运行时依赖，用标准库 `urllib`（与 ModelProvider 的 HTTP 层同一套路），可注入假实现测试 |
-| 礼貌抓取 | 默认遵守 `robots.txt`；请求间有 `--delay` 秒间隔；有 `--max-pages` 安全上限 |
-| 增量 | sqlite manifest 按 URL 记录 etag / last-modified / sha256，未变则跳过（条件请求 304，或内容 hash 兜底）|
-| 浅层深度抓取 | `--depth 0`（默认）只抓给定 URL；`--depth N` 从 HTML 中提取同域 `<a href>` 链接继续抓取（`--allow-cross-domain` 可放开跨域）|
-| 落盘命名 | 按 URL host + path 镜像成相对路径，扩展名按响应 `content-type` 判定（html/pdf/txt/md/csv），回退到 URL 自带后缀 |
+## 📦 项目结构
 
-### 阶段 A —— parse
+```
+ModelIngest/
+├── common/              # 共享工具包
+│   └── src/modelingest_common/
+│       ├── manifest.py
+│       ├── progress.py
+│       ├── frontmatter.py
+│       └── guideline.py
+│
+├── core/                # 核心编排
+│   └── src/modelingest_core/
+│       ├── cli.py
+│       ├── handlers.py
+│       ├── config.py
+│       ├── contracts.py
+│       └── orchestrator.py
+│
+├── fetch/               # 内容获取
+│   └── src/modelingest_fetch/
+│       ├── stage.py
+│       └── crawler.py
+│
+├── render/              # 视觉渲染 ⭐
+│   └── src/modelingest_render/
+│       ├── stage.py
+│       ├── screenshot.py
+│       └── tile_generator.py
+│
+├── parse/               # 文档解析
+│   └── src/modelingest_parse/
+│       ├── stage.py
+│       ├── registry.py
+│       └── parsers/
+│
+├── clean/               # 内容清洗
+│   └── src/modelingest_clean/
+│       └── stage.py
+│
+├── distill/             # 知识蒸馏
+│   └── src/modelingest_distill/
+│       ├── distiller.py
+│       ├── teacher.py
+│       ├── chunk.py
+│       ├── profiles.py
+│       └── linker.py
+│
+└── organize/            # 知识组织
+    └── src/modelingest_organize/
+        ├── stage.py
+        └── organizer.py
+```
 
-| 维度 | 做法 |
-|------|------|
-| 解析器 | 可插拔注册表，按优先级降级：**mineru → docling → marker → markitdown → passthrough**；复杂 PDF（多栏/公式/表格/阅读顺序）优先用 mineru/docling，未安装则自动退到 markitdown |
-| 优先级覆盖 | `INGEST_PDF_PARSER=docling,markitdown`（逗号分隔）|
-| 保留原件 | 原件留在 `--source`，md 写到 `--output`（镜像目录），原件由根 `.gitignore` 排除 |
-| **网页去噪** | HTML 源文件在转换前先剔除 `nav`/`header`/`footer`/`script`/`style`/表单等样板标签，以及通过 class/id/内联样式（`display:none` 等）判定为隐藏或广告/cookie 弹窗类噪声的区块（`cleaner.strip_html_boilerplate`，`--no-html-clean` 关闭）|
-| **文本规范化** | Unicode NFC、统一换行、剥离零宽/控制字符、折叠多余空行（`cleaner.normalize_text`，无条件执行）|
-| **质量过滤** | 剔除空内容/过短内容、登录墙、404/禁止访问等错误页关键词命中的低价值源，不产出 md（`cleaner.quality_issue`，`--no-quality-filter` 关闭）|
-| **Prompt injection 中和** | 扫描"忽略之前指令""你现在是……"一类面向 AI 的注入话术（中英文），命中行整体包裹成显式标注的引用块（不删除、仅隔离），避免阶段 B 外部大模型把爬来的网页内容当指令执行（`cleaner.neutralize_prompt_injection`，`--no-injection-scan` 关闭）|
-| **近似去重** | 对转换后正文算 64-bit SimHash，与 manifest 里已记录的其它文件比较汉明距离，命中只在 front-matter 标注 `near_duplicate_of`，不丢弃内容，交由下游/人工决定取舍（`--no-dedup` 关闭，`--dedup-distance` 调阈值，默认 3/64 bit）|
-| 溯源 | 每个 md 顶部 YAML front-matter：`source` / `sha256` / `converter` / `converted_at` / `assets`（可选 `near_duplicate_of` / `injection_flagged`）|
-| 增量 | sqlite manifest 记录源文件 hash（及 simhash），未变则跳过；被质量过滤的源也记入 manifest，避免每次重跑都重新判定 |
-| 多模态 | PDF 每页渲染 PNG 存 `assets/`（供视觉训练）；需 `PyMuPDF`，缺失则降级 |
+## 🚀 快速开始
 
-### 阶段 B —— distill
-
-| 维度 | 做法 |
-|------|------|
-| 蒸馏老师 | 复用 **ModelProvider** 的 `teacher` 角色（旗舰模型），按 profile 受约束输出 JSON |
-| 笔记模板 | `concept`（通用，默认）/ `algorithm`（复刻 Algorithms 版式）；见 `distill/profiles.py` |
-| 稳健性 | JSON 抽取容错 + 轻量 schema 校验，非法 note 跳过并记录，不中断整批 |
-| 原子化 | 按标题把长文切成概念块，每块产出 1-3 篇独立卡片 |
-| 建链 | 第二遍扫全库标题，把 `Related` 改写成 `[[规范标题]]`，并为每个目录生成 `<目录> MOC.md`（幂等，可单独重跑）|
-| 增量 | 独立的 distill manifest（源 md hash + profile 未变则跳过，蒸馏成本高）|
-
-## 安装
+### 安装
 
 ```bash
-cd ModelIngest
-pip install -e ".[pdf,dev]"          # markitdown + PyMuPDF(页图) + pytest
-pip install -e ".[parse]"            # 可选：docling（复杂 PDF）；或自行装 mineru/marker
-pip install -e ../ModelProvider      # 阶段 B 需要（teacher 角色）
+# 基础功能
+pip install -e .
+
+# 完整功能（包含所有可选依赖）
+pip install -e ".[all]"
+
+# 按需安装
+pip install -e ".[fetch]"      # 网页爬取
+pip install -e ".[visual]"     # 视觉渲染
+pip install -e ".[distill]"    # 知识蒸馏
+pip install -e ".[organize]"   # 知识组织
 ```
 
-## 使用
+### 基本用法
 
-### 阶段 A 前置 —— crawl（可选）
+#### 1. 端到端构建（推荐）
 
 ```bash
-# 抓取单个公开页面，落盘到 source 目录下的 web 子目录
- modelingest crawl --url https://example.com/article --output ../ObsidianRag/web
+# 从本地目录构建
+modelingest build --source ./docs --output ./knowledge_base
 
-# 批量抓取（每行一个 URL 的文件），深度 1 跟随同域链接
- modelingest crawl --urls-file urls.txt --output ../ObsidianRag/web --depth 1
+# 从网页构建
+modelingest build --source https://example.com --output ./kb
 
-# 忽略 robots.txt / 强制重抓（谨慎使用）
- modelingest crawl --url https://example.com/a --output ../ObsidianRag/web --overwrite
-
-# 抓下来的原始文件随后用普通 阶段 A 流程转换成 md
- modelingest run --source ../ObsidianRag --output ../ObsidianRag_md
+# 启用所有功能
+modelingest build --source ./docs --output ./kb --visual --distill
 ```
 
-### 阶段 A —— parse
+#### 2. 网页爬取
 
 ```bash
-# 转换（增量）：原件留在 source，md 输出到 output
-modelingest run --source ../ObsidianRag --output ../ObsidianRag_md
+# 发现链接（不下载）
+modelingest discover --url https://example.com --depth 2
 
-modelingest status --source ../ObsidianRag --output ../ObsidianRag_md   # 待转/已转/失效
-modelingest clean  --source ../ObsidianRag --output ../ObsidianRag_md   # 清理源已删的记录与 md
-
-# 可选开关
-modelingest run -s ../ObsidianRag -o ../ObsidianRag_md --no-pdf-pages   # 不抽页图
-modelingest run -s ../ObsidianRag -o ../ObsidianRag_md --overwrite      # 全量重转
-INGEST_PDF_PARSER=docling modelingest run -s ... -o ...                 # 指定解析器
-
-# 清洗相关开关（默认全部开启）
-modelingest run -s ../ObsidianRag -o ../ObsidianRag_md --no-html-clean       # 网页保留原始样板标签
-modelingest run -s ../ObsidianRag -o ../ObsidianRag_md --no-injection-scan   # 不做 prompt injection 隔离
-modelingest run -s ../ObsidianRag -o ../ObsidianRag_md --no-quality-filter   # 不过滤空/登录墙/错误页
-modelingest run -s ../ObsidianRag -o ../ObsidianRag_md --no-dedup            # 不做近似去重
-modelingest run -s ../ObsidianRag -o ../ObsidianRag_md --dedup-distance 5    # 放宽近似去重阈值
+# 抓取网页
+modelingest crawl --url https://example.com --output ./raw_docs --depth 1
 ```
 
-### 阶段 B —— distill
+#### 3. 文档解析
 
 ```bash
-# 干净 md → 结构化知识库（默认 concept 模板，自动建链 + MOC）
-modelingest distill --source ../ObsidianRag_md --output ../KnowledgeVault
-
-# 算法类语料，复刻 Algorithms 版式
-modelingest distill -s ../ObsidianRag_md -o ../KnowledgeVault --profile algorithm
-
-# 指定蒸馏模型 / 只重跑建链
-modelingest distill -s ../ObsidianRag_md -o ../KnowledgeVault --model deepseek:deepseek-chat
-modelingest distill-link --output ../KnowledgeVault
+# 解析为 Markdown
+modelingest parse --source ./raw_docs --output ./markdown
 ```
 
-## 输出示例
+#### 4. 知识蒸馏
 
-阶段 A：
+```bash
+# 生成准则（可选）
+modelingest guideline --output ./kb --domain 算法 --interactive
 
-```
-ObsidianRag_md/
-├── Hardware-PCB/
-│   ├── 布线规则与技巧.md          # front-matter + 正文
-│   └── assets/Horowitz/Horowitz_p0001.png   # PDF 页图（本地保留，不上传）
-└── .ingest_cache/ingest_manifest.sqlite     # 增量状态（本地保留）
+# 执行蒸馏
+modelingest distill --source ./markdown --output ./kb --profile algorithm
 ```
 
-阶段 B（distill 产出，版式对齐 Algorithms）：
+## 📚 命令参考
 
-```
-KnowledgeVault/
-├── Hardware-PCB/
-│   ├── 布线规则与技巧.md         # 原子卡片：Definition/Key Points/.../Related [[..]]
-│   ├── ...
-│   └── Hardware-PCB MOC.md       # 自动生成的目录索引
-└── .distill_cache/distill_manifest.sqlite
-```
+### 主命令
 
-parse 产物 md 顶部 front-matter：
+- `build` - 端到端构建知识库
+- `discover` - 发现网页链接
+- `crawl` - 抓取网页
+- `parse` - 解析文档
+- `distill` - 知识蒸馏
+- `guideline` - 生成知识库准则
+
+### 工具命令
+
+- `init` - 生成配置文件模板
+- `scan` - 扫描待处理文件
+- `status` - 查看增量状态
+- `clean` - 清理缓存
+
+## 🎨 架构设计
+
+ModelIngest 采用**独立包架构**，每个包负责特定功能：
+
+- **解耦设计**：各阶段独立开发、测试、发布
+- **灵活组合**：按需安装和使用
+- **易于扩展**：插件式架构，支持自定义解析器
+- **类型安全**：完整的类型标注
+
+## 🔧 配置
+
+支持 Python 代码配置和 YAML 文件配置：
 
 ```yaml
----
-source: Hardware-PCB/Horowitz.pdf
-sha256: 9f2b...
-converter: docling
-converted_at: 2026-07-20T16:00:00+00:00
-assets:
-  - assets/Horowitz/Horowitz_p0001.png
-generator: ModelIngest
----
+# modelingest.yaml
+version: "2.0"
+
+source_type: local
+source_path: ./docs
+
+stages:
+  - fetch
+  - parse
+  - clean
+  - distill
+
+output_root: ./knowledge_base
+overwrite: false
+max_workers: 4
 ```
 
-## 在 ModelToolbox 中的位置
+## 📖 文档
 
-流水线**最上游**：`ModelIngest(crawl → parse → distill) → 数据合成 → ModelTraining → Ollama → 调用`。
-遵循「松耦合」原则，仅通过文件 / CLI 边界与其它模块交互；distill 通过 `import modelprovider`
-调用 teacher（同为 MIT，许可证相容）。crawl 阶段不下载任何额外依赖，与 parse/distill 完全解耦。
+- [快速入门](docs/v2-quickstart.md)
+- [架构设计](docs/modelingest-refactor-summary.md)
 
-> 许可证：MIT（ModelToolbox 原创）。依赖的 markitdown / docling / mineru / PyMuPDF 各自适用其许可证。
+## 🤝 贡献
+
+欢迎贡献代码、报告问题或提出建议！
+
+## 📄 许可证
+
+MIT License - 详见 [LICENSE](LICENSE) 文件
+├── distill/             # 知识蒸馏
+├── organize/            # 知识库组织
+│
+├── modelingest_v1_legacy/  # v1.0 旧版代码（保留）
+├── docs/                # 文档
+├── examples/            # 示例
+└── tests/               # 测试
+```
+
+## 🚀 快速开始
+
+### 安装
+
+```bash
+# 克隆仓库
+git clone https://github.com/yourusername/modelingest.git
+cd ModelIngest
+
+# 安装核心包
+pip install -e common -e core -e parse -e clean
+
+# 可选：安装视觉渲染
+pip install -e render
+playwright install chromium
+```
+
+### 基础使用
+
+```bash
+# 1. 初始化配置（可选）
+python -m modelingest_core.cli init
+
+# 2. 构建知识库（推荐）
+python -m modelingest_core.cli build \
+  --source ./raw_docs \
+  --output ./knowledge_base \
+  --visual
+
+# 3. 单独运行某个阶段
+python -m modelingest_core.cli parse \
+  --source ./raw_docs \
+  --output ./md_output
+```
+
+### 配置文件使用
+
+创建 `modelingest.yaml`：
+
+```yaml
+source:
+  type: local
+  path: ./raw_docs
+
+pipeline:
+  stages: [render, parse, clean]
+  
+  render:
+    enabled: true
+    mode: tiles
+
+output:
+  root: ./knowledge_base
+```
+
+然后执行：
+
+```bash
+python -m modelingest_core.cli build --config modelingest.yaml
+```
+
+## 📖 文档
+
+- [快速开始](docs/quickstart.md)
+- [架构设计](docs/modelingest-refactor.md)
+- [预期效果](docs/modelingest-expected-outcomes.md)
+- [贡献指南](CONTRIBUTING.md)
+- [更新日志](CHANGELOG.md)
+
+## 🔧 高级配置
+
+创建 `modelingest.yaml` 配置文件：
+
+```yaml
+source:
+  type: local
+  path: ./raw_docs
+
+pipeline:
+  stages: [render, parse, clean, distill, organize]
+  
+  # 视觉渲染配置
+  render:
+    enabled: true
+    mode: tiles          # tiles | full
+    tile_width: 1024
+    tile_height: 1024
+  
+  # 解析配置
+  parse:
+    parsers: [visual, mineru, docling, markitdown]
+    
+  # 蒸馏配置
+  distill:
+    profile: concept     # concept | algorithm | research
+    model: gpt-4         # 可选
+
+output:
+  root: ./knowledge_base
+  structure: obsidian
+```
+
+## 🛠️ 开发
+
+```bash
+# 安装开发依赖
+pip install -e common[dev] -e core[dev]
+
+# 运行快速测试
+python test_quick.py
+
+# 代码检查
+black common/ core/ parse/ clean/
+pylint common/ core/ parse/ clean/
+```
+
+## 🏗️ 架构特点
+
+### 独立包设计
+
+每个阶段都是独立的 Python 包，可单独安装和使用：
+
+```bash
+# 只安装解析功能
+pip install -e common -e core -e parse
+
+# 添加视觉渲染
+pip install -e render
+
+# 完整安装
+pip install -e common -e core -e render -e parse -e clean -e distill -e organize
+```
+
+### 解析器注册表
+
+支持插件式扩展：
+
+```python
+from modelingest_parse.registry import register_parser
+
+@register_parser("my_parser", priority=50)
+def parse_my_format(path: Path) -> Optional[str]:
+    """自定义解析器"""
+    return markdown_text
+```
+
+## 🤝 贡献
+
+欢迎贡献！请查看 [CONTRIBUTING.md](CONTRIBUTING.md)
+
+## 📝 更新日志
+
+查看 [CHANGELOG.md](CHANGELOG.md) 了解版本历史。
+
+## 📄 许可
+
+[MIT License](LICENSE)
+
+## 🙏 致谢
+
+- [markitdown](https://github.com/microsoft/markitdown) - 文档解析
+- [Playwright](https://playwright.dev/) - 网页渲染
+- [PyMuPDF](https://pymupdf.readthedocs.io/) - PDF 处理
+- [PixelRAG](https://github.com/StarTrail-org/PixelRAG) - 架构灵感
+
+## 📧 联系
+
+- 问题反馈：[GitHub Issues](https://github.com/yourusername/modelingest/issues)
+- 讨论区：[GitHub Discussions](https://github.com/yourusername/modelingest/discussions)
+
+## 🗂️ 旧版本
+
+v1.0 代码已移至 `modelingest_v1_legacy/` 目录，供参考使用。

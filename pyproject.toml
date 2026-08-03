@@ -1,0 +1,65 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "modeltoolbox"
+version = "0.2.0"
+description = "A terminal-first toolbox for model ingestion, memory, providers, skills, MCP, sandboxing, and training."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "lbxAOA" }]
+dependencies = [
+    "modeltoolbox-core>=0.2.0",
+    "modeltoolbox-provider>=0.2.0",
+    "modeltoolbox-skill>=0.2.0",
+    "modeltoolbox-mcp>=0.2.0",
+]
+
+[project.optional-dependencies]
+# Optional module groups
+ingest = ["modeltoolbox-ingest>=0.2.0"]
+office = ["modeltoolbox-office>=0.2.0"]
+memory = ["modeltoolbox-memory>=0.2.0"]
+training = ["modeltoolbox-training>=0.2.0"]
+
+# Install all modules
+all = [
+    "modeltoolbox-ingest>=0.2.0",
+    "modeltoolbox-office>=0.2.0",
+    "modeltoolbox-memory>=0.2.0",
+    "modeltoolbox-training>=0.2.0",
+]
+
+dev = [
+    "pytest>=8",
+    "pytest-cov>=4",
+]
+
+[project.scripts]
+mtb = "modeltoolbox_core.cli:main"
+
+[project.entry-points."mtb.plugins"]
+core = "modeltoolbox_core.cli:register"
+ingest = "modeltoolbox_ingest.cli:register"
+provider = "modeltoolbox_provider.cli:register"
+office = "modeltoolbox_office.cli:register"
+memory = "modeltoolbox_memory.cli:register"
+mcp = "modeltoolbox_mcp.cli:register"
+skill = "modeltoolbox_skill.cli:register"
+train = "modeltoolbox_training.cli:register"
+
+# Workspace mode: This is a metapackage that depends on submodules
+# Install subpackages individually or use optional dependencies
+
+[tool.setuptools]
+# Metapackage - no packages to discover
+py-modules = []
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

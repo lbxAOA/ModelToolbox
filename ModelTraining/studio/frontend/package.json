@@ -57,7 +57,7 @@
     "cmdk": "^1.1.1",
     "dexie": "^4.3.0",
     "fflate": "0.8.3",
-    "js-yaml": "^4.1.1",
+    "js-yaml": "^4.3.0",
     "katex": "^0.16.28",
     "lucide-react": "^1.7.0",
     "mammoth": "^1.11.0",
@@ -85,10 +85,14 @@
     "@tanstack/router-core": "1.169.2",
     "@tanstack/history": "1.161.6",
     "mermaid": "11.15.0",
-    "hono": "4.12.25",
+    "hono": "4.12.31",
+    "@hono/node-server": "2.0.10",
     "qs": "6.15.2",
     "ip-address": "10.1.1",
-    "brace-expansion@5.0.5": "5.0.6"
+    "brace-expansion": "5.0.8",
+    "dompurify": "3.4.12",
+    "fast-uri": "3.1.4",
+    "postcss": "8.5.18"
   },
   "devDependencies": {
     "@biomejs/biome": "^1.9.4",

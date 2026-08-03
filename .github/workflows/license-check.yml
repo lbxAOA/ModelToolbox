@@ -1,0 +1,122 @@
+name: License Compliance Check
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  python-licenses:
+    name: Check Python Dependencies
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pip-licenses
+          pip install -e .
+      
+      - name: Check Python licenses
+        run: |
+          echo "=== Python Package Licenses ==="
+          pip-licenses --format=markdown --output-file=licenses-python.md
+          
+          # Check for problematic licenses
+          echo "Checking for AGPL, GPL, and proprietary licenses..."
+          if pip-licenses --format=json | jq -r '.[] | select(.License | test("AGPL|GPL(?!-3.0-or-later)|Proprietary"; "i")) | .Name + " (" + .License + ")"' | grep -q .; then
+            echo "❌ Found problematic licenses:"
+            pip-licenses --format=json | jq -r '.[] | select(.License | test("AGPL|GPL(?!-3.0-or-later)|Proprietary"; "i")) | .Name + " (" + .License + ")"'
+            exit 1
+          else
+            echo "✅ All Python dependencies have acceptable licenses"
+          fi
+      
+      - name: Upload Python licenses report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: python-licenses
+          path: licenses-python.md
+
+  npm-licenses:
+    name: Check NPM Dependencies
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+      
+      - name: Install license-checker
+        run: npm install -g license-checker
+      
+      - name: Check NPM licenses
+        run: |
+          echo "=== NPM Package Licenses ==="
+          license-checker --summary
+          license-checker --json --out licenses-npm.json
+          
+          # Check for problematic licenses
+          echo "Checking for AGPL, GPL, and proprietary licenses..."
+          if license-checker --json | jq -r 'to_entries[] | select(.value.licenses | test("AGPL|GPL|Proprietary"; "i")) | .key + " (" + .value.licenses + ")"' | grep -q .; then
+            echo "❌ Found problematic licenses:"
+            license-checker --json | jq -r 'to_entries[] | select(.value.licenses | test("AGPL|GPL|Proprietary"; "i")) | .key + " (" + .value.licenses + ")"'
+            exit 1
+          else
+            echo "✅ All NPM dependencies have acceptable licenses"
+          fi
+      
+      - name: Upload NPM licenses report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: npm-licenses
+          path: licenses-npm.json
+
+  verify-third-party-doc:
+    name: Verify THIRD_PARTY.md is up-to-date
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Check THIRD_PARTY.md exists
+        run: |
+          if [ ! -f THIRD_PARTY.md ]; then
+            echo "❌ THIRD_PARTY.md not found"
+            exit 1
+          fi
+          echo "✅ THIRD_PARTY.md exists"
+      
+      - name: Check for legacy code markers
+        run: |
+          echo "Checking for unresolved legacy code issues..."
+          
+          # Check if ModelTraining legacy code is still present
+          if grep -q "legacy unsloth-derived material" THIRD_PARTY.md; then
+            echo "⚠️  ModelTraining still has unresolved legacy code"
+            if [ -d "ModelTraining/studio" ]; then
+              echo "❌ Legacy studio directory still exists"
+              exit 1
+            fi
+          fi
+          
+          # Check ModelMemory/code_review_graph status
+          if grep -q "source/license origin still needs final confirmation" THIRD_PARTY.md; then
+            echo "⚠️  ModelMemory/code_review_graph license needs confirmation"
+          fi
+          
+          echo "✅ THIRD_PARTY.md check complete"
