@@ -36,6 +36,9 @@ secrets.json
 **/.obsidian/workspace.json
 **/.obsidian/workspace-mobile.json
 
+# ── Personal automation scripts ─────────────────────────────
+scripts/
+
 # ── Model weights & artifacts (never commit) ────────────────
 *.gguf
 *.safetensors
