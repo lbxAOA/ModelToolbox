@@ -1,1 +1,0 @@
-"""ModelToolbox skill package."""

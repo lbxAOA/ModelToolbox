@@ -1,0 +1,47 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "modeltoolbox-mcp"
+version = "0.2.0"
+description = "MCP server management for ModelToolbox."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+dependencies = [
+    "modeltoolbox-core>=0.2.0",
+    "click>=8.1",
+    "typer>=0.12",
+]
+
+[project.optional-dependencies]
+# Individual MCP servers as optional dependencies
+ltspice = ["ltspice-mcp>=0.1.0"]
+obsidian-rag = ["obsidian-rag-mcp>=0.1.0"]
+altium = ["altium-mcp>=0.5.0"]
+ach-roundtable = ["ach-roundtable-mcp>=0.5.0"]
+
+# Install all MCP servers
+all = [
+    "ltspice-mcp>=0.1.0",
+    "obsidian-rag-mcp>=0.1.0",
+    "altium-mcp>=0.5.0",
+    "ach-roundtable-mcp>=0.5.0",
+]
+
+dev = [
+    "pytest>=8",
+    "pytest-cov>=4",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["modeltoolbox_mcp*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"

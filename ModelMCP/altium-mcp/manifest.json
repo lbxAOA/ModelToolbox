@@ -2,7 +2,7 @@
   "manifest_version": "0.3",
   "name": "altium-mcp",
   "display_name": "Altium MCP",
-  "version": "0.4.6",
+  "version": "0.5.0",
   "description": "Control Altium Designer from Claude: query components, create symbols/footprints, layout tools, output jobs.",
   "author": {
     "name": "coffeenmusic"

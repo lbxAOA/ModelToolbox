@@ -1,61 +1,63 @@
 {
-  "name": "modeltoolbox",
-  "version": "0.1.5",
-  "description": "npm-managed terminal entry for ModelToolbox.",
-  "license": "MIT",
-  "homepage": "https://github.com/lbxAOA/ModelToolbox#readme",
-  "bugs": {
-    "url": "https://github.com/lbxAOA/ModelToolbox/issues"
-  },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/lbxAOA/ModelToolbox.git"
-  },
-  "type": "commonjs",
-  "bin": {
-    "mtb": "npm/mtb.cjs"
-  },
-  "files": [
-    "ModelCore/",
-    "ModelIngest/clean/src/",
-    "ModelIngest/common/src/",
-    "ModelIngest/core/src/",
-    "ModelIngest/distill/src/",
-    "ModelIngest/fetch/src/",
-    "ModelIngest/organize/src/",
-    "ModelIngest/parse/src/",
-    "ModelIngest/render/src/",
-    "ModelIngest/*/pyproject.toml",
-    "ModelIngest/pyproject.toml",
-    "ModelIngest/README.md",
-    "ModelProvider/modeltoolbox_provider/",
-    "ModelOffice/modeltoolbox_office/",
-    "ModelMemory/modeltoolbox_memory/",
-    "ModelMCP/modeltoolbox_mcp/",
-    "ModelSkill/modeltoolbox_skill/",
-    "ModelTraining/modeltoolbox_training/",
-    "npm/",
-    "!**/__pycache__/",
-    "!**/*.pyc",
-    "pyproject.toml",
-    "README.md",
-    "LICENSE",
-    "THIRD_PARTY.md"
-  ],
-  "scripts": {
-    "postinstall": "node ./npm/bootstrap.cjs",
-    "bootstrap": "node ./npm/bootstrap.cjs",
-    "start": "node ./npm/mtb.cjs",
-    "mtb": "node ./npm/mtb.cjs",
-    "doctor": "node ./npm/mtb.cjs doctor",
-    "update": "npm install -g .",
-    "uninstall": "npm uninstall -g modeltoolbox"
-  },
-  "engines": {
-    "node": ">=18"
-  },
-  "publishConfig": {
-    "access": "public",
-    "registry": "https://registry.npmjs.org/"
-  }
+    "name":  "modeltoolbox",
+    "version":  "0.2.0",
+    "description":  "npm-managed terminal entry for ModelToolbox.",
+    "license":  "MIT",
+    "homepage":  "https://github.com/lbxAOA/ModelToolbox#readme",
+    "bugs":  {
+                 "url":  "https://github.com/lbxAOA/ModelToolbox/issues"
+             },
+    "repository":  {
+                       "type":  "git",
+                       "url":  "git+https://github.com/lbxAOA/ModelToolbox.git"
+                   },
+    "type":  "commonjs",
+    "bin":  {
+                "mtb":  "npm/mtb.cjs"
+            },
+    "files":  [
+                  "ModelCore/",
+                  "ModelProvider/",
+                  "ModelSkill/",
+                  "ModelMCP/",
+                  "ModelIngest/clean/src/",
+                  "ModelIngest/common/src/",
+                  "ModelIngest/core/src/",
+                  "ModelIngest/distill/src/",
+                  "ModelIngest/fetch/src/",
+                  "ModelIngest/organize/src/",
+                  "ModelIngest/parse/src/",
+                  "ModelIngest/render/src/",
+                  "ModelIngest/*/pyproject.toml",
+                  "ModelIngest/pyproject.toml",
+                  "ModelIngest/README.md",
+                  "ModelOffice/modeltoolbox_office/",
+                  "ModelMemory/modeltoolbox_memory/",
+                  "ModelTraining/modeltoolbox_training/",
+                  "npm/",
+                  "!**/__pycache__/",
+                  "!**/*.pyc",
+                  "!**/tests/",
+                  "!**/.pytest_cache/",
+                  "pyproject.toml",
+                  "README.md",
+                  "LICENSE",
+                  "THIRD_PARTY.md"
+              ],
+    "scripts":  {
+                    "postinstall":  "node ./npm/bootstrap.cjs",
+                    "bootstrap":  "node ./npm/bootstrap.cjs",
+                    "start":  "node ./npm/mtb.cjs",
+                    "mtb":  "node ./npm/mtb.cjs",
+                    "doctor":  "node ./npm/mtb.cjs doctor",
+                    "update":  "npm install -g .",
+                    "uninstall":  "npm uninstall -g modeltoolbox"
+                },
+    "engines":  {
+                    "node":  "\u003e=18"
+                },
+    "publishConfig":  {
+                          "access":  "public",
+                          "registry":  "https://registry.npmjs.org/"
+                      }
 }
