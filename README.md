@@ -29,9 +29,10 @@ Requirements:
 - Node.js 18 or newer
 - Python 3.11 or newer
 
-On Windows, set `MODELTOOLBOX_PYTHON` before installation to select a specific
-Python executable when needed. The package otherwise prefers the Python 3.11
-launcher and falls back to `python`.
+The package automatically detects Python 3.11+ on your system. On Windows, it
+prefers `py -3.12` or `py -3.11` launchers. On macOS/Linux, it checks
+`python3.12`, `python3.11`, then `python3`. Set `MODELTOOLBOX_PYTHON` to
+specify a custom Python executable.
 
 Verify the installation:
 
@@ -43,25 +44,35 @@ mtb doctor
 Lifecycle commands:
 
 ```powershell
-mtb version
-mtb doctor
+mtb version           # Show version
+mtb doctor            # Check environment
 npm update -g modeltoolbox
 npm uninstall -g modeltoolbox
 ```
 
-To pin or roll back to a release, use npm's normal version selector, for example
-`npm install -g modeltoolbox@0.1.0`.
+To pin or roll back to a release, use npm's version selector:
+`npm install -g modeltoolbox@0.2.0`.
 
-The npm package exposes the `mtb` command and runs its install bootstrap during
-installation when npm install scripts are allowed. The bootstrap creates or
-reuses a private `.venv` inside the installed package and installs the bundled
-Python workspace. If npm install scripts are disabled, the `mtb` launcher runs
-the same bootstrap on first use.
+The npm package creates a self-contained Python environment during installation.
+The `mtb` command works from any directory after global installation.
 
-`mtb` self-bootstraps the local `.venv` on first use if npm lifecycle scripts
-were disabled. `mtb doctor` is the first troubleshooting command; it reports
-the Python runtime, current directory, and installed package version without
-printing credentials or environment values.
+### Troubleshooting
+
+**"Python 3.11 or newer is required"**
+- Install Python 3.11+ from https://www.python.org/downloads/
+- Or set `MODELTOOLBOX_PYTHON=/path/to/python3.11`
+
+**"mtb-core not found in virtual environment"**
+- Run `npm rebuild modeltoolbox` to reinstall Python packages
+- Check `npm config get ignore-scripts` is not `true`
+
+**Permission errors on global install**
+- Use `npx modeltoolbox` instead of global install
+- Or install locally: `npm install modeltoolbox` then `npx mtb`
+
+**Environment is corrupted**
+- Uninstall: `npm uninstall -g modeltoolbox`
+- Reinstall: `npm install -g modeltoolbox`
 
 Running bare `mtb` opens the interactive ModelToolbox terminal. Type `help` to
 see commands and `exit` to quit.
