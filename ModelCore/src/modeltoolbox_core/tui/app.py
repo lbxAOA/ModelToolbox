@@ -57,7 +57,7 @@ if TEXTUAL_AVAILABLE:
         
         def action_toggle_dark(self) -> None:
             """Toggle dark mode."""
-            self.dark = not self.dark
+            self.theme = "textual-dark" if self.theme == "textual-light" else "textual-light"
 
 else:
     class ModelToolboxApp:

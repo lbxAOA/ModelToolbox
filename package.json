@@ -1,6 +1,6 @@
 {
     "name": "modeltoolbox",
-    "version": "0.2.2",
+    "version": "0.2.3",
     "description": "npm-managed terminal entry for ModelToolbox.",
     "license": "MIT",
     "homepage": "https://github.com/lbxAOA/ModelToolbox#readme",
@@ -12,6 +12,9 @@
         "url": "git+https://github.com/lbxAOA/ModelToolbox.git"
     },
     "type": "commonjs",
+    "bin": {
+        "mtb": "./npm/mtb.cjs"
+    },
     "files": [
         "ModelCore/",
         "ModelProvider/",

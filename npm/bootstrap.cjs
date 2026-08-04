@@ -36,3 +36,4 @@ if (!existsSync(venvPython)) {
 }
 
 run(venvPython, ["-m", "pip", "install", "-e", "."]);
+run(venvPython, ["-m", "pip", "install", "textual>=0.88.0"]);
