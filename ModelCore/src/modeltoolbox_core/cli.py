@@ -79,6 +79,18 @@ def version() -> None:
     typer.echo(f"modeltoolbox {installed_version}")
 
 
+@app.command()
+def ui() -> None:
+    """Launch the interactive Textual TUI."""
+    try:
+        from modeltoolbox_core.tui.app import run_tui
+        run_tui()
+    except ImportError:
+        typer.secho("Error: Textual is not installed.", fg=typer.colors.RED)
+        typer.secho("Install with: pip install modeltoolbox-core[ui]", fg=typer.colors.YELLOW)
+        raise typer.Exit(1)
+
+
 @guard_app.command("git-deletions")
 def guard_git_deletions(
     max_deleted: int = typer.Option(5, help="Maximum tolerated deleted tracked files."),

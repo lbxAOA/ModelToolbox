@@ -39,6 +39,9 @@ secrets.json
 # ── Personal automation scripts ─────────────────────────────
 scripts/
 
+# ── Personal debug docs (local only) ────────────────────────
+docs/
+
 # ── Model weights & artifacts (never commit) ────────────────
 *.gguf
 *.safetensors

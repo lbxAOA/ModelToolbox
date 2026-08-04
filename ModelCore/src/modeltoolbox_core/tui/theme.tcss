@@ -1,0 +1,80 @@
+/* ModelToolbox Textual Theme */
+
+Screen {
+    background: $surface;
+}
+
+#app-grid {
+    layout: vertical;
+    height: 100%;
+}
+
+LogoWidget {
+    height: auto;
+    padding: 1 2;
+    border: solid cyan;
+    background: $panel;
+}
+
+TabbedContent {
+    height: 1fr;
+}
+
+TabPane {
+    padding: 1 2;
+}
+
+.tab-label {
+    color: $text-muted;
+}
+
+.tab-label.-active {
+    color: $text;
+    text-style: bold;
+}
+
+Footer {
+    background: $panel;
+}
+
+Header {
+    background: $primary;
+}
+
+/* Session Tab */
+.session-info {
+    border: solid green;
+    padding: 1;
+    margin: 1 0;
+}
+
+.quick-actions {
+    layout: horizontal;
+    height: auto;
+}
+
+.action-button {
+    margin: 0 1;
+}
+
+/* Workspaces Tab */
+.workspace-list {
+    border: solid yellow;
+    height: 1fr;
+}
+
+/* History Tab */
+.history-list {
+    border: solid blue;
+    height: 1fr;
+}
+
+/* Settings Tab */
+.settings-panel {
+    border: solid magenta;
+    padding: 1;
+}
+
+.setting-item {
+    margin: 1 0;
+}
