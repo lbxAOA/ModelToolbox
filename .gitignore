@@ -24,6 +24,8 @@ build/
 out/
 .turbo/
 *.tsbuildinfo
+*.tgz
+package-lock.json
 
 # ── Secrets / local config ──────────────────────────────────
 .env

@@ -49,6 +49,11 @@ class SessionTab(Static):
             self.app.bell()
             self.notify("Running health check...", title="Doctor")
         elif button_id == "btn-version":
-            self.notify("ModelToolbox v0.1.0", title="Version")
+            from importlib.metadata import PackageNotFoundError, version as pkg_version
+            try:
+                ver = pkg_version("modeltoolbox")
+            except PackageNotFoundError:
+                ver = "dev"
+            self.notify(f"ModelToolbox v{ver}", title="Version")
         elif button_id == "btn-clear":
             self.notify("History cleared", title="Clear")

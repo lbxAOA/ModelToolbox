@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "modeltoolbox-core"
-version = "0.2.4"
+version = "0.2.5"
 description = "Core utilities for ModelToolbox: logging, telemetry, configuration, and plugin system."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -30,6 +30,9 @@ dev = [
 [tool.setuptools.packages.find]
 where = ["src"]
 include = ["modeltoolbox_core*"]
+
+[tool.setuptools.package-data]
+modeltoolbox_core = ["tui/*.tcss"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
