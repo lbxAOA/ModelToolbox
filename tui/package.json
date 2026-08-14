@@ -4,7 +4,7 @@
   "description": "ModelToolbox terminal workbench",
   "type": "module",
   "bin": {
-    "mtb-tui": "./bin/mtb-tui.mjs"
+    "mtb-tui": "bin/mtb-tui.mjs"
   },
   "files": [
     "bin/",
