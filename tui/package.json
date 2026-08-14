@@ -9,15 +9,11 @@
   "files": [
     "bin/",
     "src/",
-    "test/",
     "README.md",
     "package.json"
   ],
   "engines": {
     "node": ">=18"
   },
-  "license": "MIT",
-  "scripts": {
-    "test": "node --test ./test/*.test.mjs"
-  }
+  "license": "MIT"
 }
