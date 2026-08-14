@@ -1,0 +1,31 @@
+[project]
+name = "modeltoolbox-next"
+version = "0.1.0"
+python = ">=3.11"
+license-file = "LICENSE"
+
+[policy]
+third-party-components = false
+network-during-build = false
+network-during-test = false
+allowed-license-files = ["LICENSE"]
+allowed-platform-prerequisites = ["python-standard-library", "flutter-sdk", "dart-sdk", "flutter-test-sdk", "nodejs", "npm"]
+
+[applications]
+cli = "cli/main.py"
+flutter = "flutter"
+tui = "tui"
+
+[modules]
+foundation = "modules/foundation"
+command = "modules/command"
+protocol = "modules/protocol"
+skill = "modules/skill"
+mcp = "modules/mcp"
+provider = "modules/provider"
+training = "modules/training"
+ui = "modules/ui"
+
+[commands]
+test = "tools/test/run.py"
+audit = "tools/audit/check_zero_components.py"

@@ -24,7 +24,9 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install pip-licenses
-          pip install -e .
+          # Install from local paths: the sibling distributions this metapackage
+          # depends on are not necessarily published at the version under test.
+          pip install "./ModelCore[web]" ./ModelProvider ./ModelSkill ./ModelMCP
       
       - name: Check Python licenses
         run: |
@@ -104,14 +106,16 @@ jobs:
       - name: Check for legacy code markers
         run: |
           echo "Checking for unresolved legacy code issues..."
-          
-          # Check if ModelTraining legacy code is still present
+
+          # studio was an AGPL-3.0 application; reintroducing it would
+          # relicense the MIT npm package by inclusion.
+          if [ -d "ModelTraining/studio" ]; then
+            echo "❌ AGPL studio directory has been reintroduced"
+            exit 1
+          fi
+
           if grep -q "legacy unsloth-derived material" THIRD_PARTY.md; then
             echo "⚠️  ModelTraining still has unresolved legacy code"
-            if [ -d "ModelTraining/studio" ]; then
-              echo "❌ Legacy studio directory still exists"
-              exit 1
-            fi
           fi
           
           # Check ModelMemory/code_review_graph status

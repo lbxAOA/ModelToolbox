@@ -6,23 +6,91 @@ on:
 
 jobs:
   python:
-    runs-on: windows-latest
+    name: python ${{ matrix.python }} on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        python: ["3.11", "3.13"]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
-      - name: Install
-        run: python -m pip install -e . pip-licenses
-      - name: Compile
-        run: python -m compileall ModelCore ModelIngest ModelProvider ModelOffice ModelMemory ModelMCP ModelSkill ModelTraining
+          python-version: ${{ matrix.python }}
+
+      - name: Install packages
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install "./ModelCore[web,dev]" ./ModelProvider ./ModelSkill ./ModelMCP
+
       - name: Tests
-        run: python -m unittest discover -s tests -v
+        run: python -m pytest ModelCore/tests -q
+
       - name: CLI smoke
         run: |
           mtb --help
           mtb version
           mtb doctor
-          mtb provider list --json
-      - name: License gate
+          mtb module list
+
+      - name: WebUI smoke
+        shell: python
+        run: |
+          from fastapi.testclient import TestClient
+          from modeltoolbox_core.webui.server import create_app
+
+          with TestClient(create_app()) as client:
+              assert client.get("/health").json()["status"] == "ok"
+              modules = client.get("/api/modules").json()
+              assert [m["id"] for m in modules] == [
+                  "ingest", "mcp", "memory", "office", "provider", "skill", "training"
+              ]
+              assert client.get("/").status_code == 200
+          print("webui ok")
+
+  npm:
+    name: npm on ${{ matrix.os }} (node ${{ matrix.node }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        node: ["18", "20", "22"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Build wheels
+        shell: pwsh
+        run: ./scripts/build-wheels.ps1
+
+      # Exercises a real global install, the self-heal path used by
+      # `--ignore-scripts`, and that both `mtb` and `mtb webui` actually work.
+      - name: npm smoke
+        shell: pwsh
+        run: ./scripts/smoke-npm.ps1 -SkipBuild
+
+  license-gate:
+    name: license gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install packages
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install "./ModelCore[web]" ./ModelProvider ./ModelSkill ./ModelMCP pip-licenses
+
+      # The npm package is MIT; a copyleft dependency reaching the shipped
+      # runtime would relicense it by inclusion.
+      - name: Fail on copyleft dependencies
         run: pip-licenses --fail-on "GPL-3.0;AGPL-3.0"

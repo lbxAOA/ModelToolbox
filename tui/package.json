@@ -1,0 +1,23 @@
+{
+  "name": "modeltoolbox-tui",
+  "version": "0.1.0",
+  "description": "ModelToolbox terminal workbench",
+  "type": "module",
+  "bin": {
+    "mtb-tui": "./bin/mtb-tui.mjs"
+  },
+  "files": [
+    "bin/",
+    "src/",
+    "test/",
+    "README.md",
+    "package.json"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "license": "MIT",
+  "scripts": {
+    "test": "node --test ./test/*.test.mjs"
+  }
+}
