@@ -25,7 +25,7 @@ jobs:
           python -m pip install "./ModelCore[web,dev]" ./ModelProvider ./ModelSkill ./ModelMCP
 
       - name: Tests
-        run: python -m pytest ModelCore/tests -q
+        run: python -m pytest tests ModelCore/tests -q
 
       - name: CLI smoke
         run: |
@@ -48,6 +48,19 @@ jobs:
               ]
               assert client.get("/").status_code == 200
           print("webui ok")
+
+  tui:
+    name: TUI syntax
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Check syntax
+        run: |
+          node --check tui/src/app.mjs
+          node --check tui/src/render.mjs
 
   npm:
     name: npm on ${{ matrix.os }} (node ${{ matrix.node }})

@@ -8,6 +8,7 @@ license-file = "LICENSE"
 third-party-components = false
 network-during-build = false
 network-during-test = false
+runtime-marketplace = "explicit-opt-in-trusted-sources-only"
 allowed-license-files = ["LICENSE"]
 allowed-platform-prerequisites = ["python-standard-library", "flutter-sdk", "dart-sdk", "flutter-test-sdk", "nodejs", "npm"]
 
