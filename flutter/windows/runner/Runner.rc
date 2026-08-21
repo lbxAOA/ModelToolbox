@@ -89,13 +89,13 @@ BEGIN
     BEGIN
         BLOCK "040904e4"
         BEGIN
-            VALUE "CompanyName", "com.example" "\0"
-            VALUE "FileDescription", "modeltoolbox_workbench" "\0"
+            VALUE "CompanyName", "lbxAOA" "\0"
+            VALUE "FileDescription", "ModelToolbox Workbench" "\0"
             VALUE "FileVersion", VERSION_AS_STRING "\0"
-            VALUE "InternalName", "modeltoolbox_workbench" "\0"
-            VALUE "LegalCopyright", "Copyright (C) 2026 com.example. All rights reserved." "\0"
-            VALUE "OriginalFilename", "modeltoolbox_workbench.exe" "\0"
-            VALUE "ProductName", "modeltoolbox_workbench" "\0"
+            VALUE "InternalName", "ModelToolbox" "\0"
+            VALUE "LegalCopyright", "Copyright (C) 2026 lbxAOA. All rights reserved." "\0"
+            VALUE "OriginalFilename", "ModelToolbox.exe" "\0"
+            VALUE "ProductName", "ModelToolbox" "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"
         END
     END
