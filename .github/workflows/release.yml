@@ -1,0 +1,129 @@
+name: release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing vX.Y.Z tag to publish"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  build-desktop:
+    name: ${{ matrix.label }} bundle
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            label: Windows x64
+            target: windows
+            artifact: windows-x64
+          - os: ubuntu-latest
+            label: Linux x64
+            target: linux
+            artifact: linux-x64
+          - os: macos-13
+            label: macOS x64
+            target: macos
+            artifact: macos-x64
+    steps:
+      - name: Check out release tag
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref_name }}
+
+      - name: Verify Flutter SDK is available
+        shell: bash
+        run: flutter --version
+
+      - name: Restore Flutter packages
+        working-directory: flutter
+        shell: bash
+        run: flutter pub get
+
+      - name: Build Windows portable bundle
+        if: matrix.target == 'windows'
+        working-directory: flutter
+        shell: pwsh
+        run: |
+          flutter build windows --release
+          $tag = "${{ inputs.tag || github.ref_name }}".TrimStart("v")
+          $bundle = "ModelToolbox-windows-x64-$tag"
+          $staging = Join-Path $env:RUNNER_TEMP $bundle
+          Copy-Item "build/windows/x64/runner/Release" $staging -Recurse
+          New-Item -ItemType Directory -Force -Path release-assets | Out-Null
+          Compress-Archive -Path $staging -DestinationPath "release-assets/$bundle.zip"
+
+      - name: Build Linux relocatable bundle
+        if: matrix.target == 'linux'
+        working-directory: flutter
+        shell: bash
+        run: |
+          flutter build linux --release
+          tag="${{ inputs.tag || github.ref_name }}"
+          tag="${tag#v}"
+          bundle="ModelToolbox-linux-x64-${tag}"
+          staging="$RUNNER_TEMP/$bundle"
+          cp -a build/linux/x64/release/bundle "$staging"
+          mkdir -p release-assets
+          tar -C "$RUNNER_TEMP" -czf "release-assets/$bundle.tar.gz" "$bundle"
+
+      - name: Build macOS application bundle
+        if: matrix.target == 'macos'
+        working-directory: flutter
+        shell: bash
+        run: |
+          flutter build macos --release
+          tag="${{ inputs.tag || github.ref_name }}"
+          tag="${tag#v}"
+          bundle="ModelToolbox-macos-x64-${tag}"
+          mkdir -p release-assets
+          ditto -c -k --sequesterRsrc --keepParent "build/macos/Build/Products/Release/modeltoolbox_workbench.app" "release-assets/$bundle.zip"
+
+      - name: Upload platform release asset
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: flutter/release-assets/*
+          if-no-files-found: error
+          retention-days: 7
+
+  publish-github-release:
+    name: Publish GitHub Release
+    needs: build-desktop
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download native release assets
+        uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+          merge-multiple: true
+
+      - name: Write native asset checksums
+        working-directory: release-assets
+        shell: bash
+        run: |
+          sha256sum ModelToolbox-* > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
+      - name: Create or update GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag || github.ref_name }}
+        shell: bash
+        run: |
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" release-assets/* --clobber
+          else
+            gh release create "$TAG" release-assets/* \
+              --title "ModelToolbox $TAG" \
+              --generate-notes
+          fi
