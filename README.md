@@ -2,11 +2,11 @@
 
 ModelToolbox is a clean-room, offline-first local workbench for managing non-secret model-tooling profiles and a bounded loopback protocol router. It provides three first-party clients:
 
-- **Desktop workbench** — Flutter for Windows and macOS; Linux desktop distribution is deferred for `v0.3.0`.
+- **Desktop workbench** — Flutter for Windows, macOS, and Linux.
 - **Terminal workbench** — dependency-free Node client distributed through npm as [`modeltoolbox`](https://www.npmjs.com/package/modeltoolbox).
 - **CLI and local Bridge** — Python 3.11+ standard-library implementation that owns local state and runtime operations.
 
-> **Release status:** `v0.3.0` is the first unified source release for the clean-room workbench. Native desktop distribution currently includes a Windows portable bundle and a macOS `.app` bundle. Linux desktop distribution is deferred. These are application bundles—not signed platform installers—until platform-specific signing and installer packaging are configured.
+> **Release status:** `v0.3.0` is the first unified source release for the clean-room workbench. Native desktop distribution includes a Windows portable bundle, a Linux relocatable bundle, and a macOS `.app` bundle. These are application bundles—not signed platform installers—until platform-specific signing and installer packaging are configured.
 
 ## Download and run
 
@@ -20,14 +20,17 @@ modeltoolbox_workbench.exe
 
 The bundle must remain intact: the executable depends on its adjacent Flutter DLLs and data directories. Windows SmartScreen may show an unknown-publisher warning until a code-signing certificate is configured.
 
-### Linux desktop — deferred
+### Linux desktop — relocatable bundle
 
-Linux desktop distribution is intentionally deferred for `v0.3.0`; no Linux native bundle is uploaded to this GitHub Release. Linux users can use the source checkout and build the Flutter desktop client locally:
+Download `ModelToolbox-linux-x64-0.3.0.tar.gz`, then extract and run it on a compatible x64 Linux desktop with GTK3:
 
 ```sh
-cd flutter
-flutter build linux --release
+tar -xzf ModelToolbox-linux-x64-0.3.0.tar.gz
+cd ModelToolbox-linux-x64-0.3.0
+./modeltoolbox_workbench
 ```
+
+This is a relocatable Flutter bundle, not an AppImage, `.deb`, RPM, Flatpak, or Snap package.
 
 ### macOS desktop — `.app` bundle
 
@@ -130,6 +133,8 @@ Platform-specific release builds:
 cd flutter && flutter build windows --release
 
 # Linux host
+sudo apt-get update
+sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev libstdc++-12-dev
 cd flutter && flutter build linux --release
 
 # macOS host with Xcode

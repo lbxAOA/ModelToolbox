@@ -26,6 +26,10 @@ jobs:
             label: Windows x64
             target: windows
             artifact: windows-x64
+          - os: ubuntu-24.04
+            label: Linux x64
+            target: linux
+            artifact: linux-x64
           - os: macos-15-intel
             label: macOS x64
             target: macos
@@ -41,6 +45,19 @@ jobs:
         with:
           flutter-version: "3.47.0"
           cache: true
+
+      - name: Install Linux desktop build dependencies
+        if: matrix.target == 'linux'
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            clang \
+            cmake \
+            ninja-build \
+            pkg-config \
+            libgtk-3-dev \
+            libstdc++-12-dev
 
       - name: Restore Flutter packages
         working-directory: flutter
@@ -59,6 +76,20 @@ jobs:
           Copy-Item "build/windows/x64/runner/Release" $staging -Recurse
           New-Item -ItemType Directory -Force -Path release-assets | Out-Null
           Compress-Archive -Path $staging -DestinationPath "release-assets/$bundle.zip"
+
+      - name: Build Linux relocatable bundle
+        if: matrix.target == 'linux'
+        working-directory: flutter
+        shell: bash
+        run: |
+          flutter build linux --release
+          tag="${{ inputs.tag || github.ref_name }}"
+          tag="${tag#v}"
+          bundle="ModelToolbox-linux-x64-${tag}"
+          staging="$RUNNER_TEMP/$bundle"
+          cp -a build/linux/x64/release/bundle "$staging"
+          mkdir -p release-assets
+          tar -C "$RUNNER_TEMP" -czf "release-assets/$bundle.tar.gz" "$bundle"
 
       - name: Build macOS application bundle
         if: matrix.target == 'macos'
