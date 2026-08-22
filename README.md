@@ -34,7 +34,7 @@ This is a relocatable Flutter bundle, not an AppImage, `.deb`, RPM, Flatpak, or 
 
 ### macOS desktop — `.app` bundle
 
-Download `ModelToolbox-macos-universal-0.3.0.zip`, extract it, and move `modeltoolbox_workbench.app` to Applications if desired. The bundle is not yet Developer-ID signed or notarized. macOS may block it until you explicitly allow it in Privacy & Security or run it through the Finder’s **Open** workflow.
+Download `ModelToolbox-macos-x64-0.3.0.zip`, extract it, and move `modeltoolbox_workbench.app` to Applications if desired. The bundle is not yet Developer-ID signed or notarized. macOS may block it until you explicitly allow it in Privacy & Security or run it through the Finder’s **Open** workflow.
 
 ### Terminal workbench — npm
 
