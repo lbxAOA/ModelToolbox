@@ -8,6 +8,10 @@ from io import TextIOBase
 from pathlib import Path
 from typing import Mapping, Sequence
 
+_WORKSPACE_ROOT = Path(__file__).resolve().parents[1]
+if str(_WORKSPACE_ROOT) not in sys.path:
+    sys.path.insert(0, str(_WORKSPACE_ROOT))
+
 from modules.command.model import Command, CommandContext, CommandResult, Option
 from modules.command.parser import parse_command
 from modules.command.registry import CommandRegistry
@@ -26,7 +30,7 @@ from modules.skill.service import SkillService
 from modules.router.server import serve as serve_router
 from modules.ui.service import get_state_value, set_state_value
 
-VERSION = "0.1.0"
+VERSION = "0.3.0"
 
 
 def build_registry() -> CommandRegistry:

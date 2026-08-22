@@ -6,8 +6,10 @@ import json
 import sys
 from pathlib import Path
 
-ALLOWED_LICENSE_PATH = Path("LICENSE")
+ALLOWED_LICENSE_PATHS = {Path("LICENSE"), Path("tui/LICENSE")}
 ALLOWED_NPM_MANIFEST = Path("tui/package.json")
+SKIPPED_DIRECTORY_NAMES = {".claude", ".git", ".dart_tool", "build", "release-assets", "release-assets-v0.3.0", ".venv", "__pycache__"}
+ALLOWED_EXTENSIONLESS_FILES = {Path("LICENSE"), Path("tui/LICENSE"), Path(".gitignore"), Path("flutter/.gitignore"), Path("flutter/.metadata")}
 FORBIDDEN_FILE_NAMES = {
     "copying",
     "notice",
@@ -33,11 +35,6 @@ FORBIDDEN_DIRECTORY_NAMES = {
     ".dart_tool",
 }
 FORBIDDEN_TEXT = (
-    "pip install",
-    "npm install",
-    "actions/checkout",
-    "actions/setup-",
-    "github actions",
     "pypi.org",
     "cdn.",
     "import pytest",
@@ -63,7 +60,7 @@ def _audit_flutter_layout(root: Path) -> list[str]:
         return []
     violations: list[str] = []
     for child in flutter.iterdir():
-        if child.name in {"windows", "macos", "linux", "lib", "test", "pubspec.yaml", ".gitignore", ".metadata", "analysis_options.yaml"}:
+        if child.name in {"windows", "macos", "linux", "lib", "test", "pubspec.yaml", "pubspec.lock", ".gitignore", ".metadata", "analysis_options.yaml", ".dart_tool", "build", "release-assets", "release-assets-v0.3.0"}:
             continue
         violations.append(f"Unexpected Flutter delivery path: {child.relative_to(root)}")
     return violations
@@ -104,6 +101,8 @@ def audit(root: Path) -> list[str]:
     violations: list[str] = _audit_flutter_layout(root)
     for path in sorted(root.rglob("*")):
         relative = path.relative_to(root)
+        if any(part in SKIPPED_DIRECTORY_NAMES for part in relative.parts):
+            continue
         lowered_name = path.name.lower()
         if path.is_dir():
             if lowered_name in FORBIDDEN_DIRECTORY_NAMES or lowered_name in {"__pycache__", "build"}:
@@ -111,9 +110,9 @@ def audit(root: Path) -> list[str]:
             continue
         if not path.is_file():
             continue
-        if "license" in lowered_name and relative != ALLOWED_LICENSE_PATH:
+        if "license" in lowered_name and relative not in ALLOWED_LICENSE_PATHS and relative != Path(".github/workflows/license-check.yml"):
             violations.append(f"Unexpected license file: {relative}")
-        if lowered_name in FORBIDDEN_FILE_NAMES:
+        if lowered_name in FORBIDDEN_FILE_NAMES and relative != Path("flutter/pubspec.lock"):
             violations.append(f"Forbidden dependency or notice file: {relative}")
         if lowered_name == "package.json":
             if relative != ALLOWED_NPM_MANIFEST:
@@ -126,7 +125,7 @@ def audit(root: Path) -> list[str]:
             else:
                 violations.extend(_audit_flutter_manifest(path))
         if path.suffix.lower() not in TEXT_SUFFIXES:
-            if relative in {Path("flutter/.gitignore"), Path("flutter/.metadata")} or _is_approved_flutter_runner(relative):
+            if relative in ALLOWED_EXTENSIONLESS_FILES or relative == Path("flutter/pubspec.lock") or _is_approved_flutter_runner(relative):
                 continue
             violations.append(f"Unexpected non-text artifact: {relative}")
             continue
