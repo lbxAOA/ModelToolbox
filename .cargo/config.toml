@@ -1,0 +1,18 @@
+[build]
+# Enable sccache for faster rebuilds after clean
+rustc-wrapper = "sccache"
+
+# Enable incremental compilation for faster iterative development
+incremental = true
+
+[profile.dev]
+# Faster debug builds with minimal optimization
+opt-level = 0
+
+[profile.release]
+# Keep default release settings for performance
+# Default: opt-level = 3, lto = false, codegen-units = 256
+
+[profile.dev.package."*"]
+# Faster compilation for dependencies in dev builds
+opt-level = 1

@@ -1,0 +1,218 @@
+//! Claude Code settings.json management
+//!
+//! Handles reading and writing the `pluginConfig` map in
+//! `~/.claude/settings.json`. The neighbouring `enabledPlugins` map is
+//! owned exclusively by `claude plugin enable/disable`; model-toolbox reads the
+//! current state from `claude plugin list --json` instead.
+
+use crate::PluginId;
+use anyhow::{Context, Result};
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use std::fmt;
+use std::fs;
+use std::path::{Path, PathBuf};
+use std::sync::{Mutex, OnceLock};
+
+/// Plugin installation scope. Mirrors the four `--scope` values the
+/// official `claude` CLI accepts. `Global` is the model-toolbox-side name for
+/// what the CLI calls `user`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum InstallScope {
+	Global,
+	Project,
+	Local,
+	Managed,
+}
+
+impl fmt::Display for InstallScope {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		match self {
+			InstallScope::Global => write!(f, "global"),
+			InstallScope::Project => write!(f, "project"),
+			InstallScope::Local => write!(f, "local"),
+			InstallScope::Managed => write!(f, "managed"),
+		}
+	}
+}
+
+impl From<&str> for InstallScope {
+	fn from(s: &str) -> Self {
+		match s {
+			"global" | "user" => InstallScope::Global,
+			"project" => InstallScope::Project,
+			"local" => InstallScope::Local,
+			"managed" => InstallScope::Managed,
+			other => {
+				log::warn!(
+					"Unknown install scope '{other}', defaulting to global"
+				);
+				InstallScope::Global
+			}
+		}
+	}
+}
+
+/// Plugin-related configuration from settings.json
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct ClaudeSettings {
+	/// Per-plugin user configuration
+	#[serde(rename = "pluginConfig", default)]
+	pub plugin_config: HashMap<String, serde_json::Value>,
+}
+
+static SETTINGS_FILE_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+
+impl ClaudeSettings {
+	/// Update settings atomically to avoid concurrent write races
+	pub fn update<F>(mutate: F) -> Result<()>
+	where
+		F: FnOnce(&mut Self),
+	{
+		let path = Self::settings_path()?;
+		Self::update_with_path(&path, mutate)
+	}
+
+	pub fn get_plugin_config(
+		&self,
+		id: &PluginId,
+	) -> Option<&serde_json::Value> {
+		self.plugin_config.get(&id.to_string())
+	}
+
+	pub fn set_plugin_config(
+		&mut self,
+		id: &PluginId,
+		config: serde_json::Value,
+	) {
+		self.plugin_config.insert(id.to_string(), config);
+	}
+
+	pub fn remove_plugin_config(&mut self, id: &PluginId) {
+		self.plugin_config.remove(&id.to_string());
+	}
+
+	fn settings_path() -> Result<PathBuf> {
+		Ok(dirs::home_dir()
+			.ok_or_else(|| anyhow::anyhow!("Cannot find home directory"))?
+			.join(".claude/settings.json"))
+	}
+
+	fn settings_lock() -> &'static Mutex<()> {
+		SETTINGS_FILE_LOCK.get_or_init(|| Mutex::new(()))
+	}
+
+	pub(crate) fn load_from_path(path: &Path) -> Result<Self> {
+		if !path.exists() {
+			return Ok(Self::default());
+		}
+
+		let content = fs::read_to_string(path).with_context(|| {
+			format!("Failed to read settings from {}", path.display())
+		})?;
+
+		let full_settings: serde_json::Value =
+			serde_json::from_str(&content)
+				.with_context(|| "Failed to parse settings.json".to_string())?;
+
+		let plugin_config = full_settings
+			.get("pluginConfig")
+			.and_then(|value| {
+				serde_json::from_value(value.clone())
+					.inspect_err(|e| {
+						log::debug!("Failed to parse pluginConfig: {e}")
+					})
+					.ok()
+			})
+			.unwrap_or_default();
+
+		Ok(Self { plugin_config })
+	}
+
+	fn save_to_path(&self, path: &Path) -> Result<()> {
+		if let Some(parent) = path.parent() {
+			fs::create_dir_all(parent)?;
+		}
+
+		let mut full_settings: serde_json::Value = if path.exists() {
+			let content = fs::read_to_string(path)?;
+			serde_json::from_str(&content)
+				.unwrap_or_else(|_| serde_json::json!({}))
+		} else {
+			serde_json::json!({})
+		};
+
+		full_settings["pluginConfig"] =
+			serde_json::to_value(&self.plugin_config)?;
+
+		let temp_path = super::temp_path_for(path);
+		fs::write(&temp_path, serde_json::to_string_pretty(&full_settings)?)
+			.with_context(|| {
+				format!(
+					"Failed to write temporary settings to {}",
+					temp_path.display()
+				)
+			})?;
+		fs::rename(&temp_path, path).with_context(|| {
+			format!("Failed to replace settings at {}", path.display())
+		})?;
+
+		Ok(())
+	}
+
+	fn update_with_path<F>(path: &Path, mutate: F) -> Result<()>
+	where
+		F: FnOnce(&mut Self),
+	{
+		let _guard = Self::settings_lock()
+			.lock()
+			.map_err(|_| anyhow::anyhow!("Failed to lock settings.json"))?;
+		let mut settings = Self::load_from_path(path)?;
+		mutate(&mut settings);
+		settings.save_to_path(path)
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use super::ClaudeSettings;
+	use crate::PluginId;
+	use serde_json::json;
+	use std::sync::Arc;
+
+	#[test]
+	fn update_with_path_preserves_concurrent_plugin_changes() {
+		let temp_dir = tempfile::tempdir().unwrap();
+		let settings_path = temp_dir.path().join("settings.json");
+		let path = Arc::new(settings_path);
+		let plugin_ids = vec![
+			PluginId::parse("alpha@example").unwrap(),
+			PluginId::parse("beta@example").unwrap(),
+			PluginId::parse("gamma@example").unwrap(),
+			PluginId::parse("delta@example").unwrap(),
+		];
+
+		std::thread::scope(|scope| {
+			for plugin_id in &plugin_ids {
+				let path = Arc::clone(&path);
+				let id = plugin_id.clone();
+				scope.spawn(move || {
+					ClaudeSettings::update_with_path(&path, |settings| {
+						settings.set_plugin_config(&id, json!({ "k": "v" }));
+					})
+					.unwrap();
+				});
+			}
+		});
+
+		let settings = ClaudeSettings::load_from_path(&path).unwrap();
+
+		assert_eq!(settings.plugin_config.len(), 4);
+		for id in &plugin_ids {
+			assert_eq!(
+				settings.plugin_config.get(&id.to_string()),
+				Some(&json!({ "k": "v" })),
+			);
+		}
+	}
+}

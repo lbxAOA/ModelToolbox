@@ -1,0 +1,47 @@
+version: 0.1.0
+channel: stable
+title:
+    en: "Hermes Agent and CLion support"
+    zh-Hans: "新增 Hermes Agent 与 CLion 支持"
+    zh-Hant: "新增 Hermes Agent 與 CLion 支援"
+announcement:
+    en: "ModelToolbox 0.1.0 introduces Hermes Agent as a first-class integration and adds CLion as a dedicated JetBrains AI entry."
+    zh-Hans: "ModelToolbox 0.1.0 将 Hermes Agent 作为一等集成接入，并新增 CLion 专属 JetBrains AI 入口。"
+    zh-Hant: "ModelToolbox 0.1.0 將 Hermes Agent 作為一等整合接入，並新增 CLion 專屬 JetBrains AI 入口。"
+summary:
+    en: "Manage Hermes MCP servers, Skills, and instruction files from one place; recognize CLion projects and direct JetBrains AI configuration to its IDE settings."
+    zh-Hans: "可在统一界面管理 Hermes MCP 服务、Skills 与指令文件；识别 CLion 项目，并将 JetBrains AI 配置引导至 IDE 设置。"
+    zh-Hant: "可在統一介面管理 Hermes MCP 服務、Skills 與指令檔；識別 CLion 專案，並將 JetBrains AI 設定引導至 IDE 設定。"
+highlights:
+    - id: hermes-agent-integration
+      icon: sparkles
+      category: feature
+      title:
+          en: "Hermes Agent is now supported"
+          zh-Hans: "现已支持 Hermes Agent"
+          zh-Hant: "現已支援 Hermes Agent"
+      description:
+          en: "Read and manage Hermes global MCP servers, discover global and project Skills, and surface SOUL.md and AGENTS.md instruction paths."
+          zh-Hans: "可读取和管理 Hermes 全局 MCP 服务，发现全局与项目 Skills，并展示 SOUL.md 与 AGENTS.md 指令路径。"
+          zh-Hant: "可讀取和管理 Hermes 全域 MCP 服務，發現全域與專案 Skills，並顯示 SOUL.md 與 AGENTS.md 指令路徑。"
+    - id: clion-entry
+      icon: settings
+      category: feature
+      title:
+          en: "Dedicated CLion entry"
+          zh-Hans: "CLion 专属入口"
+          zh-Hant: "CLion 專屬入口"
+      description:
+          en: "CLion projects are identified by their .idea directory. JetBrains AI MCP settings remain managed in the CLion interface, matching JetBrains configuration behavior."
+          zh-Hans: "通过 .idea 目录识别 CLion 项目。JetBrains AI 的 MCP 设置仍在 CLion 界面中管理，符合 JetBrains 的配置方式。"
+          zh-Hant: "透過 .idea 目錄識別 CLion 專案。JetBrains AI 的 MCP 設定仍在 CLion 介面中管理，符合 JetBrains 的設定方式。"
+knownIssues:
+    - id: local-windows-build-toolchain
+      title:
+          en: "Local Windows builds require Microsoft C++ Build Tools"
+          zh-Hans: "本地 Windows 构建需要 Microsoft C++ Build Tools"
+          zh-Hant: "本機 Windows 建置需要 Microsoft C++ Build Tools"
+      description:
+          en: "Install the Visual Studio C++ Build Tools workload when building locally. Hosted release builds run on GitHub Actions runners with the required toolchain."
+          zh-Hans: "本地构建时请安装 Visual Studio C++ Build Tools 工作负载。托管发布构建在已具备该工具链的 GitHub Actions 运行器上执行。"
+          zh-Hant: "本機建置時請安裝 Visual Studio C++ Build Tools 工作負載。託管發行建置在已具備該工具鏈的 GitHub Actions 執行器上執行。"

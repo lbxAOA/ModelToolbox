@@ -1,0 +1,131 @@
+import type { CodeEditorType } from "../../generated/dto";
+
+export interface OnboardingProgress {
+	hasSeenWelcome: boolean;
+	completedTours: {
+		productMap: boolean;
+		projectWorkflow: boolean;
+	};
+}
+
+export interface Project {
+	id: string;
+	name: string;
+	path: string;
+}
+
+/** A user-added MCP registry source (must implement the official registry API). */
+export interface McpRegistrySource {
+	id: string;
+	name: string;
+	url: string;
+}
+
+export interface IntegrationPreferences {
+	codeEditor?: CodeEditorType;
+}
+
+export interface ResourceGroup {
+	id: string;
+	name: string;
+}
+
+export type UpdateChannel = "stable" | "beta";
+
+export type SkillCopyCheckMode = "automatic" | "manual";
+
+export interface SkillCopyCheckPreference {
+	enabled: boolean;
+	mode: SkillCopyCheckMode;
+}
+
+export const DEFAULT_SKILL_COPY_CHECK: SkillCopyCheckPreference = {
+	enabled: true,
+	mode: "automatic",
+};
+
+export type SkillStorageMode = "preserve" | "copy";
+
+export interface SkillDiscoveryPreferences {
+	projectSkills: boolean;
+	embeddedSkills: boolean;
+	dependencySkills: boolean;
+	agentProvidedSkills: boolean;
+}
+
+export interface SkillPreferences extends SkillCopyCheckPreference {
+	groupIdenticalCopies: boolean;
+	warnOnConflicts: boolean;
+	defaultStorageMode: SkillStorageMode;
+	showDisplayNames: boolean;
+	discovery: SkillDiscoveryPreferences;
+}
+
+export const DEFAULT_SKILL_PREFERENCES: SkillPreferences = {
+	...DEFAULT_SKILL_COPY_CHECK,
+	groupIdenticalCopies: true,
+	warnOnConflicts: true,
+	defaultStorageMode: "preserve",
+	showDisplayNames: true,
+	discovery: {
+		projectSkills: true,
+		embeddedSkills: true,
+		dependencySkills: false,
+		agentProvidedSkills: true,
+	},
+};
+
+export function isSkillPreferences(value: unknown): value is SkillPreferences {
+	if (!value || typeof value !== "object") return false;
+	const preference = value as Partial<SkillPreferences>;
+	return (
+		typeof preference.enabled === "boolean" &&
+		(preference.mode === "automatic" || preference.mode === "manual") &&
+		typeof preference.groupIdenticalCopies === "boolean" &&
+		typeof preference.warnOnConflicts === "boolean" &&
+		(preference.defaultStorageMode === "preserve" ||
+			preference.defaultStorageMode === "copy") &&
+		typeof preference.showDisplayNames === "boolean" &&
+		Boolean(preference.discovery) &&
+		typeof preference.discovery?.projectSkills === "boolean" &&
+		typeof preference.discovery?.embeddedSkills === "boolean" &&
+		typeof preference.discovery?.dependencySkills === "boolean" &&
+		typeof preference.discovery?.agentProvidedSkills === "boolean"
+	);
+}
+
+export const SIDEBAR_ITEM_IDS = [
+	"home",
+	"market",
+	"usage",
+	"skills",
+	"mcp",
+	"subAgents",
+	"prompts",
+	"rules",
+	"ccPlugins",
+	"inferenceProviders",
+] as const;
+
+export type SidebarItemId = (typeof SIDEBAR_ITEM_IDS)[number];
+
+export interface SidebarItemPreference {
+	id: SidebarItemId;
+	visible: boolean;
+}
+
+export const CURRENT_VERSION = 15;
+
+export const DEFAULT_ONBOARDING_PROGRESS: OnboardingProgress = {
+	hasSeenWelcome: false,
+	completedTours: {
+		productMap: false,
+		projectWorkflow: false,
+	},
+};
+
+export const DEFAULT_SIDEBAR_ITEMS: SidebarItemPreference[] =
+	SIDEBAR_ITEM_IDS.map((id) => ({
+		id,
+		visible: true,
+	}));

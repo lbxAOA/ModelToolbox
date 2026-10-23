@@ -1,0 +1,1857 @@
+use crate::{
+	create_adapter,
+	errors::{ConfigError, Result},
+	manager::ConfigManager,
+	models::{AgentType, McpServer, Skill, SubAgent},
+	registry,
+	skills::target::ensure_skill_target_not_linked,
+	SkillTarget,
+};
+use log::{info, warn};
+use skill::sanitize::sanitize_name;
+use std::collections::{HashMap, HashSet};
+use std::fs;
+use std::path::{Path, PathBuf};
+
+// Transfers use the same per-directory bounds as skill snapshots so one
+// installation cannot read or write more than an interactive comparison.
+const MAX_SKILL_TRANSFER_BYTES: u64 = 128 * 1024 * 1024;
+const MAX_SKILL_TRANSFER_ENTRIES: usize = 10_000;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum InstallScope {
+	Global,
+	Project,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct InstallTarget {
+	pub agent: AgentType,
+	pub scope: InstallScope,
+	pub project_root: Option<PathBuf>,
+}
+
+#[derive(Debug, Clone)]
+pub struct ResourceLocator {
+	pub agent: AgentType,
+	pub scope: InstallScope,
+	pub project_root: Option<PathBuf>,
+	pub name: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SkillInstallTarget {
+	pub target: SkillTarget,
+	pub scope: InstallScope,
+	pub project_root: Option<PathBuf>,
+}
+
+impl From<InstallTarget> for SkillInstallTarget {
+	fn from(value: InstallTarget) -> Self {
+		Self {
+			target: SkillTarget::Agent(value.agent),
+			scope: value.scope,
+			project_root: value.project_root,
+		}
+	}
+}
+
+#[derive(Debug, Clone)]
+pub struct SkillResourceLocator {
+	pub target: SkillTarget,
+	pub scope: InstallScope,
+	pub project_root: Option<PathBuf>,
+	pub name: String,
+}
+
+impl From<ResourceLocator> for SkillResourceLocator {
+	fn from(value: ResourceLocator) -> Self {
+		Self {
+			target: SkillTarget::Agent(value.agent),
+			scope: value.scope,
+			project_root: value.project_root,
+			name: value.name,
+		}
+	}
+}
+
+#[derive(Debug, Clone)]
+pub struct SkillOperationResult {
+	pub target: SkillInstallTarget,
+	pub action: OperationAction,
+	pub success: bool,
+	pub error: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct SkillOperationBatchResult {
+	pub results: Vec<SkillOperationResult>,
+}
+
+impl SkillOperationBatchResult {
+	pub fn success_count(&self) -> usize {
+		self.results.iter().filter(|result| result.success).count()
+	}
+
+	pub fn failed_count(&self) -> usize {
+		self.results.iter().filter(|result| !result.success).count()
+	}
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum OperationAction {
+	Copy,
+	Delete,
+}
+
+impl std::fmt::Display for OperationAction {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		match self {
+			Self::Copy => write!(f, "copy"),
+			Self::Delete => write!(f, "delete"),
+		}
+	}
+}
+
+#[derive(Debug, Clone)]
+pub struct OperationResult {
+	pub target: InstallTarget,
+	pub action: OperationAction,
+	pub success: bool,
+	pub error: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct OperationBatchResult {
+	pub results: Vec<OperationResult>,
+}
+
+impl OperationBatchResult {
+	pub fn success_count(&self) -> usize {
+		self.results.iter().filter(|r| r.success).count()
+	}
+
+	pub fn failed_count(&self) -> usize {
+		self.results.iter().filter(|r| !r.success).count()
+	}
+}
+
+fn build_manager(target: &InstallTarget) -> ConfigManager {
+	let adapter = create_adapter(target.agent);
+	match target.scope {
+		InstallScope::Global => ConfigManager::new(adapter, true, None),
+		InstallScope::Project => {
+			ConfigManager::new(adapter, false, target.project_root.as_deref())
+		}
+	}
+}
+
+fn validate_target(target: &InstallTarget) -> Result<()> {
+	if target.scope == InstallScope::Project && target.project_root.is_none() {
+		return Err(ConfigError::InvalidConfig(
+			"project_root is required for project targets".to_string(),
+		));
+	}
+	Ok(())
+}
+
+fn mcp_supported_for_target(
+	target: &InstallTarget,
+	mcp: &McpServer,
+) -> Result<()> {
+	let adapter = create_adapter(target.agent);
+	let descriptor = registry::get(target.agent);
+	let supported = adapter.mcp_supports_transport(&mcp.transport);
+
+	if supported {
+		return Ok(());
+	}
+
+	Err(ConfigError::unsupported_operation(
+		"copy incompatible",
+		"MCP server",
+		descriptor.id,
+	))
+}
+
+fn load_source_mcp(source: &ResourceLocator) -> Result<McpServer> {
+	let mut manager = build_manager(&InstallTarget {
+		agent: source.agent,
+		scope: source.scope,
+		project_root: source.project_root.clone(),
+	});
+	manager.load()?;
+	manager.get_mcp(&source.name).cloned().ok_or_else(|| {
+		ConfigError::resource_not_found("MCP server", &source.name)
+	})
+}
+
+fn load_skill_source(source: &SkillResourceLocator) -> Result<Skill> {
+	let mut manager = source.target.manager(
+		install_scope_resource_scope(source.scope),
+		source.project_root.as_deref(),
+	);
+	manager.load()?;
+	manager
+		.get_skill(&source.name)
+		.cloned()
+		.ok_or_else(|| ConfigError::resource_not_found("skill", &source.name))
+}
+
+fn install_scope_resource_scope(scope: InstallScope) -> crate::ResourceScope {
+	match scope {
+		InstallScope::Global => crate::ResourceScope::GlobalOnly,
+		InstallScope::Project => crate::ResourceScope::ProjectOnly,
+	}
+}
+
+fn ensure_loaded(manager: &mut ConfigManager) -> Result<()> {
+	match manager.load() {
+		Ok(_) => Ok(()),
+		Err(ConfigError::NotFound { .. }) => {
+			manager.init_empty_config();
+			Ok(())
+		}
+		Err(err) => Err(err),
+	}
+}
+
+fn resolve_skill_file(path: &str) -> PathBuf {
+	if let Some(stripped) = path.strip_prefix("~/") {
+		if let Some(home) = dirs::home_dir() {
+			home.join(stripped)
+		} else {
+			PathBuf::from(path)
+		}
+	} else {
+		PathBuf::from(path)
+	}
+}
+
+fn resolve_skill_root(skill: &Skill) -> Result<PathBuf> {
+	let path = skill
+		.canonical_path
+		.as_deref()
+		.or(skill.source_path.as_deref())
+		.map(resolve_skill_file)
+		.ok_or_else(|| {
+			ConfigError::InvalidConfig(format!(
+				"Skill '{}' has no source path to copy from",
+				skill.name
+			))
+		})?;
+
+	let root = if path.is_dir() {
+		path
+	} else {
+		path.parent().map(Path::to_path_buf).ok_or_else(|| {
+			ConfigError::InvalidConfig(format!(
+				"Skill '{}' has invalid source path",
+				skill.name
+			))
+		})?
+	};
+
+	if !root.exists() {
+		return Err(ConfigError::InvalidConfig(format!(
+			"Skill source path '{}' does not exist",
+			root.display()
+		)));
+	}
+
+	Ok(root)
+}
+
+fn validate_skill_directory(path: &Path, expected_name: &str) -> Result<()> {
+	let parsed = skill::parser::parse_skill_dir(path).map_err(|error| {
+		ConfigError::InvalidConfig(format!(
+			"Skill directory '{}' cannot be parsed: {error}",
+			path.display()
+		))
+	})?;
+	if parsed.name != expected_name {
+		return Err(ConfigError::InvalidConfig(format!(
+			"Skill directory '{}' contains '{}' instead of '{}'",
+			path.display(),
+			parsed.name,
+			expected_name
+		)));
+	}
+	Ok(())
+}
+
+fn skill_directory_matches(path: &Path, expected_name: &str) -> bool {
+	validate_skill_directory(path, expected_name).is_ok()
+}
+
+fn copy_skill_directory(from: &Path, to: &Path) -> Result<()> {
+	let mut remaining_bytes = MAX_SKILL_TRANSFER_BYTES;
+	skill::copy::copy_directory_with_budget(
+		from,
+		to,
+		&mut remaining_bytes,
+		MAX_SKILL_TRANSFER_ENTRIES,
+		skill::copy::LinkTreatment::PreserveWithin(from),
+	)
+	.map(|_| ())
+	.map_err(|error| match error {
+		skill::copy::SkillCopyError::Io(error) => ConfigError::Io(error),
+		other => ConfigError::InvalidConfig(other.to_string()),
+	})
+}
+
+fn copy_skill_directory_staged(from: &Path, target: &Path) -> Result<()> {
+	let parent = target.parent().ok_or_else(|| {
+		ConfigError::InvalidConfig(format!(
+			"Skill target '{}' has no parent",
+			target.display()
+		))
+	})?;
+	fs::create_dir_all(parent)?;
+	let staged_root = tempfile::Builder::new()
+		.prefix(".model-toolbox-transfer-")
+		.tempdir_in(parent)?;
+	let candidate = staged_root.path().join("skill");
+	copy_skill_directory(from, &candidate)?;
+	fs::rename(candidate, target)?;
+	Ok(())
+}
+
+fn install_skill_directory(
+	source_root: &Path,
+	dest_root: &Path,
+	expected_name: &str,
+) -> Result<()> {
+	if skill_directory_matches(dest_root, expected_name) {
+		return Ok(());
+	}
+
+	let replace_existing = match fs::symlink_metadata(dest_root) {
+		Ok(metadata) if metadata.file_type().is_symlink() => {
+			return Err(ConfigError::InvalidConfig(format!(
+				"Refusing to replace skill symlink '{}'",
+				dest_root.display()
+			)));
+		}
+		Ok(metadata) if metadata.is_dir() => true,
+		Ok(_) => {
+			return Err(ConfigError::InvalidConfig(format!(
+				"Refusing to replace non-directory skill target '{}'",
+				dest_root.display()
+			)));
+		}
+		Err(error) if error.kind() == std::io::ErrorKind::NotFound => false,
+		Err(error) => return Err(ConfigError::Io(error)),
+	};
+
+	let parent = dest_root.parent().ok_or_else(|| {
+		ConfigError::InvalidConfig(format!(
+			"Skill target '{}' has no parent",
+			dest_root.display()
+		))
+	})?;
+	fs::create_dir_all(parent)?;
+	let replacement_root = tempfile::Builder::new()
+		.prefix(".model-toolbox-reconcile-")
+		.tempdir_in(parent)?;
+	let candidate = replacement_root.path().join("skill");
+	copy_skill_directory(source_root, &candidate)?;
+	validate_skill_directory(&candidate, expected_name)?;
+
+	if !replace_existing {
+		fs::rename(&candidate, dest_root)?;
+		return validate_skill_directory(dest_root, expected_name);
+	}
+
+	let previous = replacement_root.path().join("previous");
+	fs::rename(dest_root, &previous)?;
+	if let Err(install_error) = fs::rename(&candidate, dest_root) {
+		if let Err(restore_error) = fs::rename(&previous, dest_root) {
+			return Err(ConfigError::InvalidConfig(format!(
+				"Failed to install skill at '{}': {install_error}; \
+				 failed to restore the previous directory: {restore_error}",
+				dest_root.display()
+			)));
+		}
+		return Err(ConfigError::Io(install_error));
+	}
+
+	validate_skill_directory(dest_root, expected_name)
+}
+
+fn skill_target_dir(target: &SkillInstallTarget) -> Result<PathBuf> {
+	target
+		.target
+		.write_path(
+			install_scope_resource_scope(target.scope),
+			target.project_root.as_deref(),
+		)
+		.ok_or_else(|| {
+			ConfigError::unsupported_operation(
+				"persist",
+				"skill",
+				target.target.id(),
+			)
+		})
+}
+
+fn unique_skill_targets(
+	targets: Vec<SkillInstallTarget>,
+) -> Vec<SkillInstallTarget> {
+	let mut seen = HashSet::new();
+	let mut unique = Vec::new();
+	for target in targets {
+		let resource_scope = install_scope_resource_scope(target.scope);
+		let key = target
+			.target
+			.write_path_identity(resource_scope, target.project_root.as_deref())
+			.map(|path| format!("{:?}|{}", target.scope, path.display()))
+			.unwrap_or_else(|| {
+				format!(
+					"{}|{:?}|{}",
+					target.target.id(),
+					target.scope,
+					target
+						.project_root
+						.as_ref()
+						.map(|path| path.display().to_string())
+						.unwrap_or_default()
+				)
+			});
+		if seen.insert(key) {
+			unique.push(target);
+		}
+	}
+	unique
+}
+
+fn log_skill_operation_outcome(
+	name: &str,
+	action: OperationAction,
+	target: &SkillInstallTarget,
+	outcome: &Result<()>,
+) {
+	let target_scope = match target.scope {
+		InstallScope::Global => "global",
+		InstallScope::Project => "project",
+	};
+	match outcome {
+		Ok(()) => info!(
+			"{} skill '{}' for target '{}' in {} scope succeeded",
+			action,
+			name,
+			target.target.id(),
+			target_scope
+		),
+		Err(error) => warn!(
+			"{} skill '{}' for target '{}' in {} scope failed: {}",
+			action,
+			name,
+			target.target.id(),
+			target_scope,
+			error
+		),
+	}
+}
+
+fn unique_targets(targets: Vec<InstallTarget>) -> Vec<InstallTarget> {
+	let mut seen = HashSet::new();
+	let mut unique = Vec::new();
+	for target in targets {
+		let key = format!(
+			"{}|{:?}|{}",
+			target.agent.as_str(),
+			target.scope,
+			target
+				.project_root
+				.as_ref()
+				.map(|path| path.display().to_string())
+				.unwrap_or_default()
+		);
+		if seen.insert(key) {
+			unique.push(target);
+		}
+	}
+	unique
+}
+
+fn log_operation_outcome(
+	resource: &str,
+	name: &str,
+	action: OperationAction,
+	target: &InstallTarget,
+	outcome: &Result<()>,
+) {
+	let target_agent = registry::get(target.agent).id;
+	let target_scope = match target.scope {
+		InstallScope::Global => "global",
+		InstallScope::Project => "project",
+	};
+	match outcome {
+		Ok(()) => info!(
+			"{} {} '{}' for agent '{}' in {} scope succeeded",
+			action, resource, name, target_agent, target_scope
+		),
+		Err(error) => warn!(
+			"{} {} '{}' for agent '{}' in {} scope failed: {}",
+			action, resource, name, target_agent, target_scope, error
+		),
+	}
+}
+
+pub fn transfer_mcp(
+	source: ResourceLocator,
+	destinations: Vec<InstallTarget>,
+) -> Result<OperationBatchResult> {
+	let mcp = load_source_mcp(&source)?;
+	let destinations = unique_targets(destinations);
+	info!(
+		"transferring MCP '{}' to {} destination(s)",
+		mcp.name,
+		destinations.len()
+	);
+	let mut results = Vec::new();
+
+	for target in destinations {
+		let outcome = (|| -> Result<()> {
+			validate_target(&target)?;
+			mcp_supported_for_target(&target, &mcp)?;
+			let mut manager = build_manager(&target);
+			ensure_loaded(&mut manager)?;
+			manager.add_mcp(mcp.clone())
+		})();
+		log_operation_outcome(
+			"MCP",
+			&mcp.name,
+			OperationAction::Copy,
+			&target,
+			&outcome,
+		);
+
+		results.push(OperationResult {
+			target,
+			action: OperationAction::Copy,
+			success: outcome.is_ok(),
+			error: outcome.err().map(|err| err.to_string()),
+		});
+	}
+
+	Ok(OperationBatchResult { results })
+}
+
+pub fn reconcile_mcp(
+	source: ResourceLocator,
+	added: Vec<AgentType>,
+	removed: Vec<AgentType>,
+) -> Result<OperationBatchResult> {
+	let mcp = load_source_mcp(&source)?;
+	info!(
+		"reconciling MCP '{}' with {} added and {} removed agent(s)",
+		mcp.name,
+		added.len(),
+		removed.len()
+	);
+	let mut results = Vec::new();
+
+	let target_scope = source.scope;
+	let target_project_root = source.project_root.clone();
+
+	for agent in added {
+		let target = InstallTarget {
+			agent,
+			scope: target_scope,
+			project_root: target_project_root.clone(),
+		};
+		let outcome = (|| -> Result<()> {
+			validate_target(&target)?;
+			mcp_supported_for_target(&target, &mcp)?;
+			let mut manager = build_manager(&target);
+			ensure_loaded(&mut manager)?;
+			manager.add_mcp(mcp.clone())
+		})();
+		log_operation_outcome(
+			"MCP",
+			&mcp.name,
+			OperationAction::Copy,
+			&target,
+			&outcome,
+		);
+
+		results.push(OperationResult {
+			target,
+			action: OperationAction::Copy,
+			success: outcome.is_ok(),
+			error: outcome.err().map(|err| err.to_string()),
+		});
+	}
+
+	for agent in removed {
+		let target = InstallTarget {
+			agent,
+			scope: target_scope,
+			project_root: target_project_root.clone(),
+		};
+		let outcome = (|| -> Result<()> {
+			validate_target(&target)?;
+			let mut manager = build_manager(&target);
+			ensure_loaded(&mut manager)?;
+			manager.remove_mcp(&source.name)
+		})();
+		log_operation_outcome(
+			"MCP",
+			&source.name,
+			OperationAction::Delete,
+			&target,
+			&outcome,
+		);
+
+		results.push(OperationResult {
+			target,
+			action: OperationAction::Delete,
+			success: outcome.is_ok(),
+			error: outcome.err().map(|err| err.to_string()),
+		});
+	}
+
+	Ok(OperationBatchResult { results })
+}
+
+fn load_source_sub_agent(source: &ResourceLocator) -> Result<SubAgent> {
+	let mut manager = build_manager(&InstallTarget {
+		agent: source.agent,
+		scope: source.scope,
+		project_root: source.project_root.clone(),
+	});
+	manager.load()?;
+	manager.get_sub_agent(&source.name).cloned().ok_or_else(|| {
+		ConfigError::resource_not_found("sub-agent", &source.name)
+	})
+}
+
+pub fn transfer_sub_agent(
+	source: ResourceLocator,
+	destinations: Vec<InstallTarget>,
+) -> Result<OperationBatchResult> {
+	let sub_agent = load_source_sub_agent(&source)?;
+	let destinations = unique_targets(destinations);
+	info!(
+		"transferring sub-agent '{}' to {} destination(s)",
+		sub_agent.name,
+		destinations.len()
+	);
+	let mut results = Vec::new();
+
+	for target in destinations {
+		let outcome = (|| -> Result<()> {
+			validate_target(&target)?;
+			let descriptor = registry::get(target.agent);
+			let scope = match target.scope {
+				InstallScope::Global => {
+					crate::models::ResourceScope::GlobalOnly
+				}
+				InstallScope::Project => {
+					crate::models::ResourceScope::ProjectOnly
+				}
+			};
+			if !descriptor.supports_sub_agent_scope(scope) {
+				return Err(ConfigError::unsupported_operation(
+					"copy",
+					"sub-agent",
+					descriptor.id,
+				));
+			}
+			let mut manager = build_manager(&target);
+			ensure_loaded(&mut manager)?;
+			manager.add_sub_agent(sub_agent.clone())
+		})();
+		log_operation_outcome(
+			"sub-agent",
+			&sub_agent.name,
+			OperationAction::Copy,
+			&target,
+			&outcome,
+		);
+
+		results.push(OperationResult {
+			target,
+			action: OperationAction::Copy,
+			success: outcome.is_ok(),
+			error: outcome.err().map(|err| err.to_string()),
+		});
+	}
+
+	Ok(OperationBatchResult { results })
+}
+
+pub fn reconcile_sub_agent(
+	source: ResourceLocator,
+	added: Vec<AgentType>,
+	removed: Vec<AgentType>,
+) -> Result<OperationBatchResult> {
+	let sub_agent = load_source_sub_agent(&source)?;
+	info!(
+		"reconciling sub-agent '{}' with {} added and {} removed agent(s)",
+		sub_agent.name,
+		added.len(),
+		removed.len()
+	);
+	let mut results = Vec::new();
+
+	let target_scope = source.scope;
+	let target_project_root = source.project_root.clone();
+
+	for agent in added {
+		let target = InstallTarget {
+			agent,
+			scope: target_scope,
+			project_root: target_project_root.clone(),
+		};
+		let outcome = (|| -> Result<()> {
+			validate_target(&target)?;
+			let descriptor = registry::get(target.agent);
+			let scope = match target.scope {
+				InstallScope::Global => {
+					crate::models::ResourceScope::GlobalOnly
+				}
+				InstallScope::Project => {
+					crate::models::ResourceScope::ProjectOnly
+				}
+			};
+			if !descriptor.supports_sub_agent_scope(scope) {
+				return Err(ConfigError::unsupported_operation(
+					"copy",
+					"sub-agent",
+					descriptor.id,
+				));
+			}
+			let mut manager = build_manager(&target);
+			ensure_loaded(&mut manager)?;
+			manager.add_sub_agent(sub_agent.clone())
+		})();
+		log_operation_outcome(
+			"sub-agent",
+			&sub_agent.name,
+			OperationAction::Copy,
+			&target,
+			&outcome,
+		);
+
+		results.push(OperationResult {
+			target,
+			action: OperationAction::Copy,
+			success: outcome.is_ok(),
+			error: outcome.err().map(|err| err.to_string()),
+		});
+	}
+
+	for agent in removed {
+		let target = InstallTarget {
+			agent,
+			scope: target_scope,
+			project_root: target_project_root.clone(),
+		};
+		let outcome = (|| -> Result<()> {
+			validate_target(&target)?;
+			let mut manager = build_manager(&target);
+			ensure_loaded(&mut manager)?;
+			manager.remove_sub_agent(&source.name)
+		})();
+		log_operation_outcome(
+			"sub-agent",
+			&source.name,
+			OperationAction::Delete,
+			&target,
+			&outcome,
+		);
+
+		results.push(OperationResult {
+			target,
+			action: OperationAction::Delete,
+			success: outcome.is_ok(),
+			error: outcome.err().map(|err| err.to_string()),
+		});
+	}
+
+	Ok(OperationBatchResult { results })
+}
+
+pub fn transfer_skill<S, D>(
+	source: S,
+	destinations: Vec<D>,
+) -> Result<SkillOperationBatchResult>
+where
+	S: Into<SkillResourceLocator>,
+	D: Into<SkillInstallTarget>,
+{
+	let source = source.into();
+	let skill = load_skill_source(&source)?;
+	let source_root = resolve_skill_root(&skill)?;
+	validate_skill_directory(&source_root, &skill.name)?;
+	let safe_name = sanitize_name(&skill.name);
+	let destinations = unique_skill_targets(
+		destinations.into_iter().map(Into::into).collect(),
+	);
+	info!(
+		"transferring skill '{}' from '{}' to {} destination(s)",
+		skill.name,
+		source_root.display(),
+		destinations.len()
+	);
+	let mut results = Vec::new();
+
+	for target in destinations {
+		let outcome = (|| -> Result<()> {
+			if target.scope == InstallScope::Project
+				&& target.project_root.is_none()
+			{
+				return Err(ConfigError::InvalidConfig(
+					"project_root is required for project targets".to_string(),
+				));
+			}
+			let target_dir = skill_target_dir(&target)?;
+			let mut manager = target.target.manager(
+				install_scope_resource_scope(target.scope),
+				target.project_root.as_deref(),
+			);
+			ensure_loaded(&mut manager)?;
+			if manager.get_skill(&skill.name).is_some() {
+				return Err(ConfigError::resource_exists("skill", &skill.name));
+			}
+
+			let dest_root = target_dir.join(&safe_name);
+			if dest_root.exists() {
+				return Err(ConfigError::resource_exists("skill", &skill.name));
+			}
+
+			copy_skill_directory_staged(&source_root, &dest_root)
+		})();
+		log_skill_operation_outcome(
+			&skill.name,
+			OperationAction::Copy,
+			&target,
+			&outcome,
+		);
+
+		results.push(SkillOperationResult {
+			target,
+			action: OperationAction::Copy,
+			success: outcome.is_ok(),
+			error: outcome.err().map(|err| err.to_string()),
+		});
+	}
+
+	Ok(SkillOperationBatchResult { results })
+}
+
+pub fn reconcile_skill<S, T>(
+	source: S,
+	added: Vec<T>,
+	removed: Vec<T>,
+) -> Result<SkillOperationBatchResult>
+where
+	S: Into<SkillResourceLocator>,
+	T: Into<SkillTarget>,
+{
+	let source = source.into();
+	let added = added.into_iter().map(Into::into).collect::<Vec<_>>();
+	let removed = removed.into_iter().map(Into::into).collect::<Vec<_>>();
+	let skill = load_skill_source(&source)?;
+	let source_root = resolve_skill_root(&skill)?;
+	validate_skill_directory(&source_root, &skill.name)?;
+	let safe_name = sanitize_name(&skill.name);
+	info!(
+		"reconciling skill '{}' with {} added and {} removed agent(s)",
+		skill.name,
+		added.len(),
+		removed.len()
+	);
+	let mut results = Vec::new();
+
+	let target_scope = source.scope;
+	let target_project_root = source.project_root.clone();
+
+	let mut dir_to_targets: HashMap<PathBuf, (PathBuf, Vec<SkillTarget>)> =
+		HashMap::new();
+	for target in added {
+		let install_target = SkillInstallTarget {
+			target,
+			scope: target_scope,
+			project_root: target_project_root.clone(),
+		};
+		match skill_target_dir(&install_target) {
+			Ok(target_dir) => {
+				let identity = target
+					.write_path_identity(
+						install_scope_resource_scope(target_scope),
+						target_project_root.as_deref(),
+					)
+					.unwrap_or_else(|| target_dir.clone());
+				dir_to_targets
+					.entry(identity)
+					.or_insert_with(|| (target_dir, Vec::new()))
+					.1
+					.push(target);
+			}
+			Err(error) => {
+				let outcome = Err(error);
+				log_skill_operation_outcome(
+					&skill.name,
+					OperationAction::Copy,
+					&install_target,
+					&outcome,
+				);
+				results.push(SkillOperationResult {
+					target: install_target,
+					action: OperationAction::Copy,
+					success: false,
+					error: outcome.err().map(|error| error.to_string()),
+				});
+			}
+		}
+	}
+
+	for (_, (target_dir, targets)) in dir_to_targets {
+		let dest_root = target_dir.join(&safe_name);
+		let outcome =
+			install_skill_directory(&source_root, &dest_root, &skill.name);
+		for target in targets {
+			let install_target = SkillInstallTarget {
+				target,
+				scope: target_scope,
+				project_root: target_project_root.clone(),
+			};
+			log_skill_operation_outcome(
+				&skill.name,
+				OperationAction::Copy,
+				&install_target,
+				&outcome,
+			);
+			results.push(SkillOperationResult {
+				target: install_target,
+				action: OperationAction::Copy,
+				success: outcome.is_ok(),
+				error: outcome.as_ref().err().map(ToString::to_string),
+			});
+		}
+	}
+
+	for target in removed {
+		let install_target = SkillInstallTarget {
+			target,
+			scope: target_scope,
+			project_root: target_project_root.clone(),
+		};
+		let outcome = (|| -> Result<()> {
+			let target_dir = skill_target_dir(&install_target)?;
+			ensure_skill_target_not_linked(
+				&target_dir,
+				install_scope_resource_scope(install_target.scope),
+				install_target.project_root.as_deref(),
+			)?;
+			let skill_path = target_dir.join(&safe_name);
+			let metadata = match fs::symlink_metadata(&skill_path) {
+				Ok(metadata) => metadata,
+				Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+					return Ok(());
+				}
+				Err(error) => return Err(ConfigError::Io(error)),
+			};
+			if metadata.file_type().is_symlink() {
+				fs::remove_file(&skill_path)?;
+			} else if metadata.is_dir() {
+				fs::remove_dir_all(&skill_path)?;
+			} else {
+				return Err(ConfigError::InvalidConfig(format!(
+					"Refusing to remove non-directory skill target '{}'",
+					skill_path.display()
+				)));
+			}
+			Ok(())
+		})();
+		log_skill_operation_outcome(
+			&skill.name,
+			OperationAction::Delete,
+			&install_target,
+			&outcome,
+		);
+		results.push(SkillOperationResult {
+			target: install_target,
+			action: OperationAction::Delete,
+			success: outcome.is_ok(),
+			error: outcome.err().map(|error| error.to_string()),
+		});
+	}
+
+	Ok(SkillOperationBatchResult { results })
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+	use crate::models::McpTransport;
+	use std::sync::{Mutex, OnceLock};
+	use tempfile::tempdir;
+
+	fn env_lock() -> &'static Mutex<()> {
+		static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+		LOCK.get_or_init(|| Mutex::new(()))
+	}
+
+	#[test]
+	fn shared_skill_targets_are_deduplicated_by_destination() {
+		let root = PathBuf::from("/project");
+		let targets = unique_skill_targets(vec![
+			SkillInstallTarget {
+				target: SkillTarget::Universal,
+				scope: InstallScope::Project,
+				project_root: Some(root.clone()),
+			},
+			SkillInstallTarget {
+				target: SkillTarget::Agent(AgentType::Cline),
+				scope: InstallScope::Project,
+				project_root: Some(root),
+			},
+		]);
+
+		assert_eq!(targets.len(), 1);
+		assert_eq!(targets[0].target, SkillTarget::Universal);
+	}
+
+	#[cfg(unix)]
+	#[test]
+	fn linked_skill_targets_are_deduplicated_by_destination() {
+		let temp = tempdir().unwrap();
+		let root = temp.path();
+		let universal_root = root.join(".agents/skills");
+		fs::create_dir_all(&universal_root).unwrap();
+		let native_root = root.join(".claude/skills");
+		fs::create_dir_all(native_root.parent().unwrap()).unwrap();
+		std::os::unix::fs::symlink(&universal_root, &native_root).unwrap();
+
+		let targets = unique_skill_targets(vec![
+			SkillInstallTarget {
+				target: SkillTarget::Universal,
+				scope: InstallScope::Project,
+				project_root: Some(root.to_path_buf()),
+			},
+			SkillInstallTarget {
+				target: SkillTarget::Agent(AgentType::Claude),
+				scope: InstallScope::Project,
+				project_root: Some(root.to_path_buf()),
+			},
+		]);
+
+		assert_eq!(targets.len(), 1);
+		assert_eq!(targets[0].target, SkillTarget::Universal);
+	}
+
+	#[test]
+	fn transfer_mcp_copies_to_other_agent_project() {
+		let _guard = env_lock().lock().unwrap();
+		let temp = tempdir().unwrap();
+		let source_root = temp.path().join("source");
+		let dest_root = temp.path().join("dest");
+		fs::create_dir_all(&source_root).unwrap();
+		fs::create_dir_all(&dest_root).unwrap();
+
+		let mut source_manager = ConfigManager::new(
+			create_adapter(AgentType::Claude),
+			false,
+			Some(&source_root),
+		);
+		source_manager.load().unwrap();
+		source_manager
+			.add_mcp(McpServer::new(
+				"filesystem",
+				McpTransport::stdio("npx", vec!["mcp-filesystem".to_string()]),
+			))
+			.unwrap();
+
+		let result = transfer_mcp(
+			ResourceLocator {
+				agent: AgentType::Claude,
+				scope: InstallScope::Project,
+				project_root: Some(source_root.clone()),
+				name: "filesystem".to_string(),
+			},
+			vec![InstallTarget {
+				agent: AgentType::Cursor,
+				scope: InstallScope::Project,
+				project_root: Some(dest_root.clone()),
+			}],
+		)
+		.unwrap();
+
+		assert_eq!(result.success_count(), 1);
+
+		let mut dest_manager = ConfigManager::new(
+			create_adapter(AgentType::Cursor),
+			false,
+			Some(&dest_root),
+		);
+		dest_manager.load().unwrap();
+		assert!(dest_manager.get_mcp("filesystem").is_some());
+	}
+
+	#[test]
+	fn reconcile_mcp_deletes_when_removed() {
+		let _guard = env_lock().lock().unwrap();
+		let temp = tempdir().unwrap();
+		let root = temp.path().join("project");
+		fs::create_dir_all(&root).unwrap();
+
+		let mut manager = ConfigManager::new(
+			create_adapter(AgentType::Claude),
+			false,
+			Some(&root),
+		);
+		manager.load().unwrap();
+		manager
+			.add_mcp(McpServer::new(
+				"filesystem",
+				McpTransport::stdio("npx", vec!["mcp-filesystem".to_string()]),
+			))
+			.unwrap();
+
+		let result = reconcile_mcp(
+			ResourceLocator {
+				agent: AgentType::Claude,
+				scope: InstallScope::Project,
+				project_root: Some(root.clone()),
+				name: "filesystem".to_string(),
+			},
+			vec![],                  // added
+			vec![AgentType::Claude], // removed
+		)
+		.unwrap();
+
+		assert_eq!(result.results.len(), 1);
+		assert_eq!(result.results[0].action, OperationAction::Delete);
+
+		let mut manager = ConfigManager::new(
+			create_adapter(AgentType::Claude),
+			false,
+			Some(&root),
+		);
+		manager.load().unwrap();
+		assert!(manager.get_mcp("filesystem").is_none());
+	}
+
+	#[test]
+	fn transfer_skill_copies_whole_folder() {
+		let _guard = env_lock().lock().unwrap();
+		let temp = tempdir().unwrap();
+		let source_root = temp.path().join("source");
+		let dest_root = temp.path().join("dest");
+		fs::create_dir_all(&source_root).unwrap();
+		fs::create_dir_all(&dest_root).unwrap();
+
+		let mut source_manager = ConfigManager::new(
+			create_adapter(AgentType::Claude),
+			false,
+			Some(&source_root),
+		);
+		source_manager.load().unwrap();
+		let mut skill = Skill::new("repo-helper");
+		skill.description = Some("Copies files".to_string());
+		source_manager.add_skill(skill).unwrap();
+		let asset_dir = source_root.join(".claude/skills/repo-helper/assets");
+		fs::create_dir_all(&asset_dir).unwrap();
+		fs::write(asset_dir.join("notes.txt"), "hello").unwrap();
+
+		let result = transfer_skill(
+			ResourceLocator {
+				agent: AgentType::Claude,
+				scope: InstallScope::Project,
+				project_root: Some(source_root.clone()),
+				name: "repo-helper".to_string(),
+			},
+			vec![InstallTarget {
+				agent: AgentType::Cursor,
+				scope: InstallScope::Project,
+				project_root: Some(dest_root.clone()),
+			}],
+		)
+		.unwrap();
+
+		assert_eq!(result.success_count(), 1);
+		assert!(dest_root
+			.join(".cursor/skills/repo-helper/assets/notes.txt")
+			.exists());
+	}
+
+	#[cfg(unix)]
+	#[test]
+	fn transfer_skill_preserves_relative_file_link() {
+		let _guard = env_lock().lock().unwrap();
+		let temp = tempdir().unwrap();
+		let source_root = temp.path().join("source");
+		let dest_root = temp.path().join("dest");
+		fs::create_dir_all(&source_root).unwrap();
+		fs::create_dir_all(&dest_root).unwrap();
+
+		let mut source_manager = ConfigManager::new(
+			create_adapter(AgentType::Claude),
+			false,
+			Some(&source_root),
+		);
+		source_manager.load().unwrap();
+		source_manager.add_skill(Skill::new("repo-helper")).unwrap();
+		let source_skill = source_root.join(".claude/skills/repo-helper");
+		fs::write(source_skill.join("notes.txt"), "notes").unwrap();
+		std::os::unix::fs::symlink(
+			"notes.txt",
+			source_skill.join("linked-notes.txt"),
+		)
+		.unwrap();
+
+		let result = transfer_skill(
+			ResourceLocator {
+				agent: AgentType::Claude,
+				scope: InstallScope::Project,
+				project_root: Some(source_root),
+				name: "repo-helper".to_string(),
+			},
+			vec![InstallTarget {
+				agent: AgentType::Cursor,
+				scope: InstallScope::Project,
+				project_root: Some(dest_root.clone()),
+			}],
+		)
+		.unwrap();
+
+		assert_eq!(result.success_count(), 1);
+		let installed =
+			dest_root.join(".cursor/skills/repo-helper/linked-notes.txt");
+		assert!(fs::symlink_metadata(&installed)
+			.unwrap()
+			.file_type()
+			.is_symlink());
+		assert_eq!(
+			fs::read_link(installed).unwrap(),
+			PathBuf::from("notes.txt")
+		);
+	}
+
+	#[test]
+	fn reconcile_skill_deletes_when_removed() {
+		let _guard = env_lock().lock().unwrap();
+		let temp = tempdir().unwrap();
+		let root = temp.path().join("project");
+		fs::create_dir_all(&root).unwrap();
+
+		let mut manager = ConfigManager::new(
+			create_adapter(AgentType::Claude),
+			false,
+			Some(&root),
+		);
+		manager.load().unwrap();
+		let mut skill = Skill::new("repo-helper");
+		skill.description = Some("Copies files".to_string());
+		manager.add_skill(skill).unwrap();
+
+		let result = reconcile_skill(
+			ResourceLocator {
+				agent: AgentType::Claude,
+				scope: InstallScope::Project,
+				project_root: Some(root.clone()),
+				name: "repo-helper".to_string(),
+			},
+			vec![],                  // added
+			vec![AgentType::Claude], // removed
+		)
+		.unwrap();
+
+		assert_eq!(result.results.len(), 1);
+		assert_eq!(result.results[0].action, OperationAction::Delete);
+
+		let mut manager = ConfigManager::new(
+			create_adapter(AgentType::Claude),
+			false,
+			Some(&root),
+		);
+		manager.load().unwrap();
+		assert!(manager.get_skill("repo-helper").is_none());
+	}
+
+	#[test]
+	fn reconcile_native_target_does_not_remove_universal_skill() {
+		let _guard = env_lock().lock().unwrap();
+		let temp = tempdir().unwrap();
+		let root = temp.path().join("project");
+		fs::create_dir_all(&root).unwrap();
+
+		let mut universal = SkillTarget::Universal
+			.manager(crate::ResourceScope::ProjectOnly, Some(&root));
+		universal.load().unwrap();
+		universal.add_skill(Skill::new("repo-helper")).unwrap();
+
+		let result = reconcile_skill(
+			SkillResourceLocator {
+				target: SkillTarget::Universal,
+				scope: InstallScope::Project,
+				project_root: Some(root.clone()),
+				name: "repo-helper".to_string(),
+			},
+			Vec::<SkillTarget>::new(),
+			vec![SkillTarget::Agent(AgentType::OpenCode)],
+		)
+		.unwrap();
+
+		assert_eq!(result.results.len(), 1);
+		assert!(result.results[0].success);
+		assert!(root.join(".agents/skills/repo-helper/SKILL.md").is_file());
+	}
+
+	#[cfg(unix)]
+	#[test]
+	fn reconcile_rejects_removal_through_linked_skills_root() {
+		let _guard = env_lock().lock().unwrap();
+		let temp = tempdir().unwrap();
+		let root = temp.path().join("project");
+		fs::create_dir_all(&root).unwrap();
+
+		let mut universal = SkillTarget::Universal
+			.manager(crate::ResourceScope::ProjectOnly, Some(&root));
+		universal.load().unwrap();
+		universal.add_skill(Skill::new("repo-helper")).unwrap();
+		let native_root = root.join(".claude/skills");
+		fs::create_dir_all(native_root.parent().unwrap()).unwrap();
+		std::os::unix::fs::symlink(root.join(".agents/skills"), &native_root)
+			.unwrap();
+
+		let result = reconcile_skill(
+			SkillResourceLocator {
+				target: SkillTarget::Universal,
+				scope: InstallScope::Project,
+				project_root: Some(root.clone()),
+				name: "repo-helper".to_string(),
+			},
+			Vec::<SkillTarget>::new(),
+			vec![SkillTarget::Agent(AgentType::Claude)],
+		)
+		.unwrap();
+
+		assert_eq!(result.failed_count(), 1);
+		assert!(root.join(".agents/skills/repo-helper/SKILL.md").is_file());
+	}
+
+	#[test]
+	fn reconcile_reports_unsupported_native_target() {
+		let _guard = env_lock().lock().unwrap();
+		let temp = tempdir().unwrap();
+		let root = temp.path().join("project");
+		fs::create_dir_all(&root).unwrap();
+
+		let mut source = ConfigManager::new(
+			create_adapter(AgentType::Claude),
+			false,
+			Some(&root),
+		);
+		source.load().unwrap();
+		source.add_skill(Skill::new("repo-helper")).unwrap();
+
+		let result = reconcile_skill(
+			ResourceLocator {
+				agent: AgentType::Claude,
+				scope: InstallScope::Project,
+				project_root: Some(root),
+				name: "repo-helper".to_string(),
+			},
+			vec![SkillTarget::Agent(AgentType::Codex)],
+			Vec::<SkillTarget>::new(),
+		)
+		.unwrap();
+
+		assert_eq!(result.results.len(), 1);
+		assert_eq!(result.failed_count(), 1);
+		assert!(result.results[0]
+			.error
+			.as_deref()
+			.is_some_and(|error| error.contains("Cannot persist skill")));
+	}
+
+	#[cfg(unix)]
+	#[test]
+	fn reconcile_skill_removes_broken_target_symlink() {
+		let _guard = env_lock().lock().unwrap();
+		let temp = tempdir().unwrap();
+		let root = temp.path().join("project");
+		fs::create_dir_all(&root).unwrap();
+
+		let mut manager = ConfigManager::new(
+			create_adapter(AgentType::OpenCode),
+			false,
+			Some(&root),
+		);
+		manager.load().unwrap();
+		manager.add_skill(Skill::new("repo-helper")).unwrap();
+		let target = root.join(".cursor/skills/repo-helper");
+		fs::create_dir_all(target.parent().unwrap()).unwrap();
+		std::os::unix::fs::symlink("missing", &target).unwrap();
+
+		let result = reconcile_skill(
+			ResourceLocator {
+				agent: AgentType::OpenCode,
+				scope: InstallScope::Project,
+				project_root: Some(root),
+				name: "repo-helper".to_string(),
+			},
+			vec![],
+			vec![AgentType::Cursor],
+		)
+		.unwrap();
+
+		assert_eq!(result.results.len(), 1);
+		assert!(result.results[0].success);
+		assert!(target.symlink_metadata().is_err());
+	}
+
+	#[test]
+	fn transfer_sub_agent_copies_to_other_agent_project() {
+		let _guard = env_lock().lock().unwrap();
+		let temp = tempdir().unwrap();
+		let source_root = temp.path().join("source");
+		let dest_root = temp.path().join("dest");
+		fs::create_dir_all(&source_root).unwrap();
+		fs::create_dir_all(&dest_root).unwrap();
+
+		let mut source_manager = ConfigManager::new(
+			create_adapter(AgentType::Claude),
+			false,
+			Some(&source_root),
+		);
+		source_manager.load().unwrap();
+		let mut sub_agent = SubAgent::new("coder");
+		sub_agent.description = Some("Expert coder".to_string());
+		sub_agent.instruction =
+			Some("You are an expert programmer.".to_string());
+		source_manager.add_sub_agent(sub_agent).unwrap();
+
+		let result = transfer_sub_agent(
+			ResourceLocator {
+				agent: AgentType::Claude,
+				scope: InstallScope::Project,
+				project_root: Some(source_root.clone()),
+				name: "coder".to_string(),
+			},
+			vec![InstallTarget {
+				agent: AgentType::OpenCode,
+				scope: InstallScope::Project,
+				project_root: Some(dest_root.clone()),
+			}],
+		)
+		.unwrap();
+
+		assert_eq!(result.success_count(), 1);
+
+		let mut dest_manager = ConfigManager::new(
+			create_adapter(AgentType::OpenCode),
+			false,
+			Some(&dest_root),
+		);
+		dest_manager.load().unwrap();
+		assert!(dest_manager.get_sub_agent("coder").is_some());
+	}
+
+	#[test]
+	fn reconcile_sub_agent_adds_and_removes() {
+		let _guard = env_lock().lock().unwrap();
+		let temp = tempdir().unwrap();
+		let root = temp.path().join("project");
+		fs::create_dir_all(&root).unwrap();
+
+		let mut manager = ConfigManager::new(
+			create_adapter(AgentType::Claude),
+			false,
+			Some(&root),
+		);
+		manager.load().unwrap();
+		let mut sub_agent = SubAgent::new("coder");
+		sub_agent.description = Some("Expert coder".to_string());
+		sub_agent.instruction =
+			Some("You are an expert programmer.".to_string());
+		manager.add_sub_agent(sub_agent).unwrap();
+
+		let result = reconcile_sub_agent(
+			ResourceLocator {
+				agent: AgentType::Claude,
+				scope: InstallScope::Project,
+				project_root: Some(root.clone()),
+				name: "coder".to_string(),
+			},
+			vec![AgentType::OpenCode], // added
+			vec![AgentType::Claude],   // removed
+		)
+		.unwrap();
+
+		assert_eq!(result.results.len(), 2);
+		assert_eq!(result.results[0].action, OperationAction::Copy);
+		assert_eq!(result.results[0].target.agent, AgentType::OpenCode);
+		assert_eq!(result.results[1].action, OperationAction::Delete);
+		assert_eq!(result.results[1].target.agent, AgentType::Claude);
+		assert!(result.results.iter().all(|r| r.success));
+	}
+
+	#[test]
+	fn transfer_mcp_to_multiple_targets() {
+		let _guard = env_lock().lock().unwrap();
+		let temp = tempdir().unwrap();
+		let source_root = temp.path().join("source");
+		let dest_root_cursor = temp.path().join("dest_cursor");
+		let dest_root_windsurf = temp.path().join("dest_windsurf");
+		fs::create_dir_all(&source_root).unwrap();
+		fs::create_dir_all(&dest_root_cursor).unwrap();
+		fs::create_dir_all(&dest_root_windsurf).unwrap();
+
+		let mut source_manager = ConfigManager::new(
+			create_adapter(AgentType::Claude),
+			false,
+			Some(&source_root),
+		);
+		source_manager.load().unwrap();
+		source_manager
+			.add_mcp(McpServer::new(
+				"filesystem",
+				McpTransport::stdio("npx", vec!["mcp-filesystem".to_string()]),
+			))
+			.unwrap();
+
+		let result = transfer_mcp(
+			ResourceLocator {
+				agent: AgentType::Claude,
+				scope: InstallScope::Project,
+				project_root: Some(source_root.clone()),
+				name: "filesystem".to_string(),
+			},
+			vec![
+				InstallTarget {
+					agent: AgentType::Cursor,
+					scope: InstallScope::Project,
+					project_root: Some(dest_root_cursor.clone()),
+				},
+				InstallTarget {
+					agent: AgentType::Windsurf,
+					scope: InstallScope::Project,
+					project_root: Some(dest_root_windsurf.clone()),
+				},
+			],
+		)
+		.unwrap();
+
+		assert_eq!(result.success_count(), 2);
+
+		let mut cursor_manager = ConfigManager::new(
+			create_adapter(AgentType::Cursor),
+			false,
+			Some(&dest_root_cursor),
+		);
+		cursor_manager.load().unwrap();
+		assert!(cursor_manager.get_mcp("filesystem").is_some());
+
+		let mut windsurf_manager = ConfigManager::new(
+			create_adapter(AgentType::Windsurf),
+			false,
+			Some(&dest_root_windsurf),
+		);
+		windsurf_manager.load().unwrap();
+		assert!(windsurf_manager.get_mcp("filesystem").is_some());
+	}
+
+	#[test]
+	fn transfer_skill_to_multiple_targets() {
+		let _guard = env_lock().lock().unwrap();
+		let temp = tempdir().unwrap();
+		let source_root = temp.path().join("source");
+		let dest_root_cursor = temp.path().join("dest_cursor");
+		let dest_root_windsurf = temp.path().join("dest_windsurf");
+		fs::create_dir_all(&source_root).unwrap();
+		fs::create_dir_all(&dest_root_cursor).unwrap();
+		fs::create_dir_all(&dest_root_windsurf).unwrap();
+
+		let mut source_manager = ConfigManager::new(
+			create_adapter(AgentType::Claude),
+			false,
+			Some(&source_root),
+		);
+		source_manager.load().unwrap();
+		let mut skill = Skill::new("repo-helper");
+		skill.description = Some("Copies files".to_string());
+		source_manager.add_skill(skill).unwrap();
+
+		let result = transfer_skill(
+			ResourceLocator {
+				agent: AgentType::Claude,
+				scope: InstallScope::Project,
+				project_root: Some(source_root.clone()),
+				name: "repo-helper".to_string(),
+			},
+			vec![
+				InstallTarget {
+					agent: AgentType::Cursor,
+					scope: InstallScope::Project,
+					project_root: Some(dest_root_cursor.clone()),
+				},
+				InstallTarget {
+					agent: AgentType::Windsurf,
+					scope: InstallScope::Project,
+					project_root: Some(dest_root_windsurf.clone()),
+				},
+			],
+		)
+		.unwrap();
+
+		assert_eq!(result.success_count(), 2);
+		assert!(dest_root_cursor.join(".cursor/skills/repo-helper").exists());
+		assert!(dest_root_windsurf
+			.join(".windsurf/skills/repo-helper")
+			.exists());
+	}
+
+	#[test]
+	fn transfer_skill_fails_when_already_exists() {
+		let _guard = env_lock().lock().unwrap();
+		let temp = tempdir().unwrap();
+		let source_root = temp.path().join("source");
+		let dest_root = temp.path().join("dest");
+		fs::create_dir_all(&source_root).unwrap();
+		fs::create_dir_all(&dest_root).unwrap();
+
+		// Create source skill
+		let mut source_manager = ConfigManager::new(
+			create_adapter(AgentType::Claude),
+			false,
+			Some(&source_root),
+		);
+		source_manager.load().unwrap();
+		let mut skill = Skill::new("repo-helper");
+		skill.description = Some("Copies files".to_string());
+		source_manager.add_skill(skill).unwrap();
+
+		// Create existing skill in destination
+		let mut dest_manager = ConfigManager::new(
+			create_adapter(AgentType::Cursor),
+			false,
+			Some(&dest_root),
+		);
+		dest_manager.load().unwrap();
+		let mut existing_skill = Skill::new("repo-helper");
+		existing_skill.description = Some("Existing skill".to_string());
+		dest_manager.add_skill(existing_skill).unwrap();
+
+		let result = transfer_skill(
+			ResourceLocator {
+				agent: AgentType::Claude,
+				scope: InstallScope::Project,
+				project_root: Some(source_root.clone()),
+				name: "repo-helper".to_string(),
+			},
+			vec![InstallTarget {
+				agent: AgentType::Cursor,
+				scope: InstallScope::Project,
+				project_root: Some(dest_root.clone()),
+			}],
+		)
+		.unwrap();
+
+		assert_eq!(result.failed_count(), 1);
+		assert!(result.results[0]
+			.error
+			.as_ref()
+			.unwrap()
+			.contains("already exists"));
+	}
+
+	#[test]
+	fn reconcile_skill_adds_multiple_agents_to_same_dir() {
+		let _guard = env_lock().lock().unwrap();
+		let temp = tempdir().unwrap();
+		let root = temp.path().join("project");
+		fs::create_dir_all(&root).unwrap();
+
+		// Setup: Add a skill to Claude within the project
+		let mut claude_manager = ConfigManager::new(
+			create_adapter(AgentType::Claude),
+			false,
+			Some(&root),
+		);
+		claude_manager.load().unwrap();
+		let mut skill = Skill::new("shared-skill");
+		skill.description = Some("Shared across agents".to_string());
+		claude_manager.add_skill(skill).unwrap();
+
+		// Reconcile: add to Cursor and Windsurf within the same project
+		let result = reconcile_skill(
+			ResourceLocator {
+				agent: AgentType::Claude,
+				scope: InstallScope::Project,
+				project_root: Some(root.clone()),
+				name: "shared-skill".to_string(),
+			},
+			vec![AgentType::Cursor, AgentType::Windsurf],
+			vec![],
+		)
+		.unwrap();
+
+		// Both should succeed - Cursor and Windsurf use the same skills directory
+		assert_eq!(result.success_count(), 2);
+
+		// Verify directory was copied to the project's skills directory
+		// Cursor and Windsurf both use .cursor/skills/ directory
+		let skill_dir = root.join(".cursor/skills/shared-skill");
+		assert!(skill_dir.exists());
+
+		// Verify both agents can see the skill
+		let mut cursor_manager = ConfigManager::new(
+			create_adapter(AgentType::Cursor),
+			false,
+			Some(&root),
+		);
+		cursor_manager.load().unwrap();
+		assert!(cursor_manager.get_skill("shared-skill").is_some());
+
+		let mut windsurf_manager = ConfigManager::new(
+			create_adapter(AgentType::Windsurf),
+			false,
+			Some(&root),
+		);
+		windsurf_manager.load().unwrap();
+		assert!(windsurf_manager.get_skill("shared-skill").is_some());
+	}
+
+	#[cfg(unix)]
+	#[test]
+	fn reconcile_skill_rejects_broken_symlink_without_partial_install() {
+		let _guard = env_lock().lock().unwrap();
+		let temp = tempdir().unwrap();
+		let root = temp.path().join("project");
+		fs::create_dir_all(&root).unwrap();
+
+		let mut source_manager = ConfigManager::new(
+			create_adapter(AgentType::Claude),
+			false,
+			Some(&root),
+		);
+		source_manager.load().unwrap();
+		let mut skill = Skill::new("repo-helper");
+		skill.description = Some("Copies files".to_string());
+		source_manager.add_skill(skill).unwrap();
+		let source_skill = root.join(".claude/skills/repo-helper");
+		std::os::unix::fs::symlink(
+			source_skill.join("missing-resource"),
+			source_skill.join("broken-resource"),
+		)
+		.unwrap();
+
+		let source = ResourceLocator {
+			agent: AgentType::Claude,
+			scope: InstallScope::Project,
+			project_root: Some(root.clone()),
+			name: "repo-helper".to_string(),
+		};
+		let target = AgentType::Cursor;
+		let destination_skill = root.join(".cursor/skills/repo-helper");
+
+		for _ in 0..2 {
+			let result =
+				reconcile_skill(source.clone(), vec![target], vec![]).unwrap();
+
+			assert_eq!(result.failed_count(), 1);
+			assert!(!destination_skill.exists());
+			assert!(destination_skill.symlink_metadata().is_err());
+		}
+	}
+
+	#[test]
+	fn reconcile_skill_repairs_incomplete_existing_directory() {
+		let _guard = env_lock().lock().unwrap();
+		let temp = tempdir().unwrap();
+		let root = temp.path().join("project");
+		fs::create_dir_all(&root).unwrap();
+
+		let mut source_manager = ConfigManager::new(
+			create_adapter(AgentType::Claude),
+			false,
+			Some(&root),
+		);
+		source_manager.load().unwrap();
+		let mut skill = Skill::new("repo-helper");
+		skill.description = Some("Copies files".to_string());
+		source_manager.add_skill(skill).unwrap();
+
+		let destination_skill = root.join(".cursor/skills/repo-helper");
+		fs::create_dir_all(&destination_skill).unwrap();
+		fs::write(destination_skill.join("partial.txt"), "partial").unwrap();
+
+		let result = reconcile_skill(
+			ResourceLocator {
+				agent: AgentType::Claude,
+				scope: InstallScope::Project,
+				project_root: Some(root.clone()),
+				name: "repo-helper".to_string(),
+			},
+			vec![AgentType::Cursor],
+			vec![],
+		)
+		.unwrap();
+
+		assert_eq!(result.success_count(), 1);
+		assert!(destination_skill.join("SKILL.md").is_file());
+		assert!(!destination_skill.join("partial.txt").exists());
+
+		let mut dest_manager = ConfigManager::new(
+			create_adapter(AgentType::Cursor),
+			false,
+			Some(&root),
+		);
+		dest_manager.load().unwrap();
+		assert!(dest_manager.get_skill("repo-helper").is_some());
+	}
+
+	#[test]
+	fn transfer_duplicate_targets_are_deduplicated() {
+		let _guard = env_lock().lock().unwrap();
+		let temp = tempdir().unwrap();
+		let source_root = temp.path().join("source");
+		let dest_root = temp.path().join("dest");
+		fs::create_dir_all(&source_root).unwrap();
+		fs::create_dir_all(&dest_root).unwrap();
+
+		let mut source_manager = ConfigManager::new(
+			create_adapter(AgentType::Claude),
+			false,
+			Some(&source_root),
+		);
+		source_manager.load().unwrap();
+		let mut skill = Skill::new("repo-helper");
+		skill.description = Some("Copies files".to_string());
+		source_manager.add_skill(skill).unwrap();
+
+		// Pass the same target twice
+		let result = transfer_skill(
+			ResourceLocator {
+				agent: AgentType::Claude,
+				scope: InstallScope::Project,
+				project_root: Some(source_root.clone()),
+				name: "repo-helper".to_string(),
+			},
+			vec![
+				InstallTarget {
+					agent: AgentType::Cursor,
+					scope: InstallScope::Project,
+					project_root: Some(dest_root.clone()),
+				},
+				InstallTarget {
+					agent: AgentType::Cursor,
+					scope: InstallScope::Project,
+					project_root: Some(dest_root.clone()),
+				},
+			],
+		)
+		.unwrap();
+
+		// Should only process once due to deduplication
+		assert_eq!(result.results.len(), 1);
+		assert_eq!(result.success_count(), 1);
+	}
+}

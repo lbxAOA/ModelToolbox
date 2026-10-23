@@ -1,0 +1,22 @@
+[package]
+name = "model-toolbox-agents"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+serde_yaml = { workspace = true }
+toml = { workspace = true }
+toml_edit = { workspace = true }
+model-toolbox-json = { path = "../json" }
+thiserror = { workspace = true }
+dirs = { workspace = true }
+libc = { workspace = true }
+which = { workspace = true }
+model-toolbox-markdown = { path = "../markdown" }
+
+[dev-dependencies]
+tempfile = { workspace = true }

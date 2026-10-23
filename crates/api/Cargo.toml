@@ -1,0 +1,46 @@
+[package]
+name = "model-toolbox-api"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "REST API server for model-toolbox"
+
+[[bin]]
+name = "model-toolbox-api"
+path = "src/main.rs"
+
+[lib]
+name = "model_toolbox_api"
+path = "src/lib.rs"
+crate-type = [ "rlib" ]
+
+[dependencies]
+anyhow = { workspace = true }
+model-toolbox-core = { path = "../core" }
+model-toolbox-git = { path = "../git" }
+model-toolbox-inference = { path = "../inference" }
+model-toolbox-cc-plugins = { path = "../cc-plugins" }
+model-toolbox-usage = { path = "../usage" }
+model-toolbox-prompt = { path = "../prompt" }
+skill = { path = "../skill" }
+skill-audit = { path = "../skill-audit", features = [ "from-path" ] }
+skills-sh = { path = "../skills-sh" }
+mcp-catalog = { path = "../mcp-catalog" }
+rocket = { version = "0.5", features = [ "json" ] }
+rocket_cors = "0.6.0"
+tokio = { workspace = true, features = [ "rt-multi-thread", "macros", "process", "time", "io-util" ] }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+dirs = { workspace = true }
+ts-rs = { workspace = true }
+which = { workspace = true }
+open = "5"
+tempfile = { workspace = true }
+keyring = { workspace = true }
+uuid = { workspace = true }
+log = { workspace = true }
+reqwest = { workspace = true }
+chrono = { workspace = true }
+url = { workspace = true }

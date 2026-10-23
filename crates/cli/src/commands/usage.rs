@@ -1,0 +1,59 @@
+//! `model-toolbox-cli usage ...` subcommands.
+//!
+//! Thin CLI surface over the `model_toolbox_usage` crate. Both subcommands print the
+//! same JSON the desktop app consumes; the CLI does not bundle the ccusage
+//! sidecar, so `summary` resolves it from `MODEL_TOOLBOX_CCUSAGE_BIN` or `PATH`.
+
+use anyhow::{Context, Result};
+use clap::Subcommand;
+
+#[derive(Subcommand)]
+pub enum UsageAction {
+	/// Daily token and cost usage for known agents from local ccusage data
+	Summary {
+		/// Start date, YYYY-MM-DD (passed through to ccusage)
+		#[arg(long)]
+		since: Option<String>,
+		/// End date, YYYY-MM-DD (passed through to ccusage)
+		#[arg(long)]
+		until: Option<String>,
+		/// IANA timezone for day bucketing (passed through to ccusage)
+		#[arg(long)]
+		timezone: Option<String>,
+	},
+	/// Remaining rate-limit quota for Claude and Codex from each vendor endpoint
+	Limits,
+}
+
+pub fn execute(action: UsageAction) -> Result<()> {
+	let runtime = tokio::runtime::Builder::new_current_thread()
+		.enable_all()
+		.build()
+		.context("Failed to build tokio runtime")?;
+	runtime.block_on(dispatch(action))
+}
+
+async fn dispatch(action: UsageAction) -> Result<()> {
+	match action {
+		UsageAction::Summary {
+			since,
+			until,
+			timezone,
+		} => {
+			let bin = model_toolbox_usage::resolve_ccusage_bin(None);
+			let query = model_toolbox_usage::UsageQuery {
+				since,
+				until,
+				timezone,
+				..Default::default()
+			};
+			let report = model_toolbox_usage::summary(&bin, &query).await;
+			println!("{}", serde_json::to_string_pretty(&report)?);
+		}
+		UsageAction::Limits => {
+			let report = model_toolbox_usage::limits().await;
+			println!("{}", serde_json::to_string_pretty(&report)?);
+		}
+	}
+	Ok(())
+}

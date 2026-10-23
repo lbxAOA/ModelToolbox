@@ -1,0 +1,30 @@
+[package]
+name = "model-toolbox-core"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+model-toolbox-agents = { path = "../agents" }
+model-toolbox-git = { path = "../git" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+serde_yaml = { workspace = true }
+thiserror = { workspace = true }
+dirs = { workspace = true }
+toml = { workspace = true }
+tempfile = { workspace = true }
+skill = { path = "../skill" }
+which = { workspace = true }
+log = { workspace = true }
+sha2 = "0.11"
+
+[dev-dependencies]
+model-toolbox-agents = { path = "../agents" }
+tempfile = { workspace = true }
+
+[features]
+default = [ "testing" ]
+agent-validation = [  ]
+testing = [  ]

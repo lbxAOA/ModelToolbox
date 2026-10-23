@@ -1,0 +1,758 @@
+import {
+	CpuChipIcon,
+	PencilIcon,
+	PlusIcon,
+	TrashIcon,
+} from "@heroicons/react/24/solid";
+import {
+	AlertDialog,
+	Button,
+	Card,
+	FieldError,
+	Fieldset,
+	Form,
+	Input,
+	Label,
+	ListBox,
+	Menu,
+	Spinner,
+	TextArea,
+	TextField,
+	Tooltip,
+	toast,
+} from "@heroui/react";
+import {
+	useQueryClient,
+	useSuspenseQuery,
+	useMutation,
+} from "@tanstack/react-query";
+import { useMemo, useState } from "react";
+import { Controller, useForm } from "react-hook-form";
+import { useTranslation } from "react-i18next";
+import { ContextMenu, useContextMenu } from "../../components/context-menu";
+import { CreateSubAgentPanel } from "../../components/create-sub-agent-panel";
+import { ResourcePageToolbar } from "../../components/resource-page-toolbar";
+import { useAgentFilter } from "../../hooks/use-agent-filter";
+import type { SubAgentGroup } from "../../components/sub-agent-detail";
+import { SubAgentDetail } from "../../components/sub-agent-detail";
+import type {
+	SubAgentResponse,
+	UpdateSubAgentRequest,
+} from "../../generated/dto";
+import { useAgentAvailability } from "../../hooks/use-agent-availability";
+import { useApi } from "../../hooks/use-api";
+import { AgentIcon } from "../../lib/agent-icons";
+import {
+	BulkOperationError,
+	bulkFailureItemsLabel,
+} from "../../lib/bulk-errors";
+import {
+	filterItemsByAgentIds,
+	getSubAgentMergeKey,
+	sortAgents,
+} from "../../lib/utils";
+import {
+	invalidateSubAgentQueries,
+	subAgentListQueryOptions,
+} from "../../requests/sub-agents";
+
+type PanelState =
+	| { type: "empty" }
+	| { type: "create" }
+	| { type: "detail"; mergeKey: string }
+	| { type: "edit"; mergeKey: string };
+
+function formatAgentName(agent: string): string {
+	return agent.charAt(0).toUpperCase() + agent.slice(1).toLowerCase();
+}
+
+function SubAgentAgentIcons({ items }: { items: SubAgentResponse[] }) {
+	const { allAgents, availableAgents } = useAgentAvailability();
+	const enabledAgentIds = useMemo(
+		() =>
+			new Set(
+				availableAgents
+					.filter((agent) => !agent.isDisabled)
+					.map((agent) => agent.id),
+			),
+		[availableAgents],
+	);
+	const agents = useMemo(() => {
+		const set = new Set<string>();
+		for (const item of filterItemsByAgentIds(items, enabledAgentIds)) {
+			if (item.agent) set.add(item.agent);
+		}
+		return sortAgents(Array.from(set), allAgents);
+	}, [items, enabledAgentIds, allAgents]);
+
+	if (agents.length === 0) return null;
+
+	return (
+		<div className="flex shrink-0 items-center -space-x-1">
+			{agents.slice(0, 3).map((agentId, idx) => (
+				<Tooltip key={agentId} delay={0}>
+					<Tooltip.Trigger>
+						<div
+							className="relative rounded-full bg-surface ring-1 ring-surface transition-transform hover:scale-110"
+							style={{ zIndex: 3 - idx }}
+						>
+							<AgentIcon
+								id={agentId}
+								name={formatAgentName(agentId)}
+								size="xs"
+								variant="ghost"
+							/>
+						</div>
+					</Tooltip.Trigger>
+					<Tooltip.Content>
+						{formatAgentName(agentId)}
+					</Tooltip.Content>
+				</Tooltip>
+			))}
+			{agents.length > 3 && (
+				<div className="relative z-0 flex size-5 items-center justify-center rounded-full bg-default text-[10px] font-medium text-muted ring-1 ring-surface">
+					+{agents.length - 3}
+				</div>
+			)}
+		</div>
+	);
+}
+
+export default function SubAgentsPage() {
+	const { t } = useTranslation();
+	const api = useApi();
+	const queryClient = useQueryClient();
+	const { availableAgents } = useAgentAvailability();
+	const [searchQuery, setSearchQuery] = useState("");
+	const [panel, setPanel] = useState<PanelState>({ type: "empty" });
+	const contextMenu = useContextMenu<SubAgentGroup>();
+	const [deleteTarget, setDeleteTarget] = useState<SubAgentGroup | null>(
+		null,
+	);
+
+	const { data: subAgents = [] } = useSuspenseQuery({
+		...subAgentListQueryOptions({ api, scope: "global" }),
+	});
+
+	const {
+		agentId: agentFilter,
+		setAgentId,
+		filtered: filteredSubAgents,
+	} = useAgentFilter(subAgents);
+
+	const groupedSubAgents = useMemo(() => {
+		const map = new Map<string, SubAgentGroup>();
+		for (const agent of filteredSubAgents) {
+			const key = getSubAgentMergeKey(agent);
+			const existing = map.get(key);
+			if (existing) {
+				existing.items.push(agent);
+			} else {
+				map.set(key, { mergeKey: key, items: [agent] });
+			}
+		}
+		return Array.from(map.values());
+	}, [filteredSubAgents]);
+
+	const enabledAgentIds = useMemo(
+		() =>
+			new Set(
+				availableAgents
+					.filter((agent) => !agent.isDisabled)
+					.map((agent) => agent.id),
+			),
+		[availableAgents],
+	);
+
+	const displayableGroups = useMemo(
+		() =>
+			groupedSubAgents.filter(
+				(group) =>
+					filterItemsByAgentIds(group.items, enabledAgentIds).length >
+					0,
+			),
+		[groupedSubAgents, enabledAgentIds],
+	);
+
+	const activeGroup = useMemo(() => {
+		if (panel.type === "detail" || panel.type === "edit") {
+			return (
+				groupedSubAgents.find((g) => g.mergeKey === panel.mergeKey) ??
+				null
+			);
+		}
+		return null;
+	}, [panel, groupedSubAgents]);
+
+	const filteredGroups = useMemo(() => {
+		if (!searchQuery) return displayableGroups;
+		const q = searchQuery.toLowerCase();
+		return displayableGroups.filter((g) =>
+			g.items[0].name.toLowerCase().includes(q),
+		);
+	}, [displayableGroups, searchQuery]);
+
+	const selectedListKey = useMemo(() => {
+		if (panel.type === "detail" || panel.type === "edit") {
+			return new Set([panel.mergeKey]);
+		}
+		return new Set<string>();
+	}, [panel]);
+
+	const updateMutation = useMutation({
+		mutationFn: async ({
+			group,
+			body,
+		}: {
+			group: SubAgentGroup;
+			body: UpdateSubAgentRequest;
+		}) => {
+			const results = await Promise.all(
+				group.items.map((item) => {
+					if (!item.agent)
+						return Promise.resolve<SubAgentResponse | null>(null);
+					return api.subAgents.update(
+						item.name,
+						item.agent,
+						item.source === "project" ? "project" : "global",
+						body,
+					);
+				}),
+			);
+			return results.find((r): r is SubAgentResponse => r !== null);
+		},
+		onSuccess: async (data) => {
+			await invalidateSubAgentQueries(queryClient);
+			toast.success(t("subAgentUpdated"));
+			if (data) {
+				setPanel({
+					type: "detail",
+					mergeKey: getSubAgentMergeKey(data),
+				});
+			} else {
+				setPanel({ type: "empty" });
+			}
+		},
+		onError: (error) => {
+			toast.danger(
+				error instanceof Error
+					? error.message
+					: t("updateSubAgentError"),
+			);
+		},
+	});
+
+	const deleteMutation = useMutation({
+		mutationFn: async (group: SubAgentGroup) => {
+			const itemsWithAgent = group.items.filter(
+				(item): item is typeof item & { agent: string } => !!item.agent,
+			);
+			const results = await Promise.allSettled(
+				itemsWithAgent.map((item) =>
+					api.subAgents.delete(
+						item.name,
+						item.agent,
+						item.source === "project" ? "project" : "global",
+					),
+				),
+			);
+			const failures = results
+				.map((result, index) => ({
+					result,
+					item: itemsWithAgent[index],
+				}))
+				.filter(({ result }) => result.status === "rejected")
+				.map(({ item }) => ({ name: item.name, agent: item.agent }));
+			if (failures.length > 0) {
+				throw new BulkOperationError(failures);
+			}
+		},
+		onSuccess: async () => {
+			toast.success(t("subAgentDeleted"));
+			setPanel({ type: "empty" });
+		},
+		onSettled: async () => {
+			await invalidateSubAgentQueries(queryClient);
+		},
+		onError: (error) => {
+			if (error instanceof BulkOperationError) {
+				toast.danger(
+					t(
+						"bulkDeleteFailedItems",
+						bulkFailureItemsLabel(error.failures),
+					),
+				);
+				return;
+			}
+			toast.danger(
+				error instanceof Error
+					? error.message
+					: t("deleteSubAgentError"),
+			);
+		},
+	});
+
+	return (
+		<div className="flex h-full flex-col">
+			<ResourcePageToolbar
+				agentFilter={{
+					agentId: agentFilter,
+					onChange: setAgentId,
+				}}
+				searchValue={searchQuery}
+				onSearchChange={setSearchQuery}
+				searchPlaceholder={t("searchSubAgents")}
+				searchAriaLabel={t("searchSubAgents")}
+			>
+				<Button
+					isIconOnly
+					variant="ghost"
+					size="sm"
+					className="shrink-0"
+					onPress={() => setPanel({ type: "create" })}
+					aria-label={t("createSubAgent")}
+				>
+					<PlusIcon className="size-4" />
+				</Button>
+			</ResourcePageToolbar>
+			<div className="flex min-h-0 flex-1">
+				{/* List panel */}
+				<div className="relative flex w-80 shrink-0 flex-col border-r border-border">
+					<div className="flex-1 overflow-y-auto">
+						{filteredGroups.length === 0 ? (
+							<div className="flex h-full flex-col items-center justify-center gap-3 p-6">
+								<CpuChipIcon className="size-8 text-muted" />
+								<p className="text-center text-sm text-muted">
+									{t("noSubAgents")}
+								</p>
+							</div>
+						) : (
+							<ListBox
+								aria-label={t("subAgents")}
+								selectionMode="single"
+								selectionBehavior="replace"
+								selectedKeys={selectedListKey}
+								onSelectionChange={(keys) => {
+									if (keys === "all") return;
+									const key = [...keys][0] as
+										string | undefined;
+									if (!key) return;
+									setPanel({
+										type: "detail",
+										mergeKey: key,
+									});
+								}}
+								className="p-2"
+							>
+								{filteredGroups.map((group) => (
+									<ListBox.Item
+										key={group.mergeKey}
+										id={group.mergeKey}
+										textValue={group.items[0].name}
+										className="data-selected:bg-surface"
+									>
+										<div
+											className="flex w-full items-center gap-2"
+											onContextMenu={(event) =>
+												contextMenu.open(event, group)
+											}
+										>
+											<CpuChipIcon className="size-4 shrink-0 text-muted" />
+											<Label className="flex-1 truncate">
+												{group.items[0].name}
+											</Label>
+											<SubAgentAgentIcons
+												items={group.items}
+											/>
+										</div>
+									</ListBox.Item>
+								))}
+							</ListBox>
+						)}
+					</div>
+				</div>
+
+				{/* Detail / form panel */}
+				<div className="relative flex-1 overflow-hidden">
+					{panel.type === "empty" && (
+						<div className="flex h-full flex-col items-center justify-center gap-4">
+							<div className="text-center">
+								<p className="mb-2 text-sm text-muted">
+									{t("noSubAgentsDescription")}
+								</p>
+							</div>
+							<Button
+								onPress={() => setPanel({ type: "create" })}
+							>
+								<PlusIcon className="mr-2 size-4" />
+								{t("createSubAgent")}
+							</Button>
+						</div>
+					)}
+
+					{panel.type === "create" && (
+						<CreateSubAgentPanel
+							onDone={(created) => {
+								if (created) {
+									toast.success(t("subAgentCreated"));
+									setPanel({
+										type: "detail",
+										mergeKey: getSubAgentMergeKey(created),
+									});
+									return;
+								}
+								setPanel({ type: "empty" });
+							}}
+						/>
+					)}
+
+					{panel.type === "detail" && activeGroup && (
+						<SubAgentDetail
+							group={activeGroup}
+							onEdit={() =>
+								setPanel({
+									type: "edit",
+									mergeKey: panel.mergeKey,
+								})
+							}
+							onDelete={() => deleteMutation.mutate(activeGroup)}
+							isDeleting={deleteMutation.isPending}
+						/>
+					)}
+
+					{panel.type === "edit" && activeGroup && (
+						<SubAgentEditForm
+							agent={activeGroup.items[0]}
+							onSave={(body) => {
+								updateMutation.mutate({
+									group: activeGroup,
+									body,
+								});
+							}}
+							isLoading={updateMutation.isPending}
+							onCancel={() =>
+								setPanel({
+									type: "detail",
+									mergeKey: panel.mergeKey,
+								})
+							}
+						/>
+					)}
+				</div>
+			</div>
+
+			<ContextMenu
+				position={contextMenu.state?.position ?? null}
+				onClose={contextMenu.close}
+				aria-label={t("actions")}
+			>
+				<Menu.Item
+					id="edit"
+					textValue={t("editSubAgent")}
+					onAction={() => {
+						const group = contextMenu.state?.context;
+						if (group)
+							setPanel({
+								type: "edit",
+								mergeKey: group.mergeKey,
+							});
+					}}
+				>
+					<div className="flex items-center gap-2">
+						<PencilIcon className="size-4" />
+						<Label>{t("editSubAgent")}</Label>
+					</div>
+				</Menu.Item>
+				<Menu.Item
+					id="delete"
+					textValue={t("deleteSubAgent")}
+					onAction={() =>
+						setDeleteTarget(contextMenu.state?.context ?? null)
+					}
+				>
+					<div className="flex items-center gap-2 text-danger">
+						<TrashIcon className="size-4" />
+						<Label>{t("deleteSubAgent")}</Label>
+					</div>
+				</Menu.Item>
+			</ContextMenu>
+
+			<AlertDialog.Backdrop
+				isOpen={deleteTarget !== null}
+				onOpenChange={(open) => {
+					if (!open) setDeleteTarget(null);
+				}}
+			>
+				<AlertDialog.Container>
+					<AlertDialog.Dialog className="sm:max-w-[420px]">
+						<AlertDialog.CloseTrigger />
+						<AlertDialog.Header>
+							<AlertDialog.Icon status="danger" />
+							<AlertDialog.Heading>
+								{t("deleteSubAgent")}
+							</AlertDialog.Heading>
+						</AlertDialog.Header>
+						<AlertDialog.Body>
+							<p className="text-sm text-muted">
+								{t("deleteSubAgentConfirm", {
+									name: deleteTarget?.items[0].name ?? "",
+								})}
+							</p>
+						</AlertDialog.Body>
+						<AlertDialog.Footer>
+							<Button
+								slot="close"
+								variant="tertiary"
+								isDisabled={deleteMutation.isPending}
+							>
+								{t("cancel")}
+							</Button>
+							<Button
+								variant="danger"
+								isDisabled={deleteMutation.isPending}
+								onPress={() => {
+									if (deleteTarget) {
+										deleteMutation.mutate(deleteTarget);
+										setDeleteTarget(null);
+									}
+								}}
+							>
+								{deleteMutation.isPending ? (
+									<Spinner size="sm" color="current" />
+								) : (
+									t("delete")
+								)}
+							</Button>
+						</AlertDialog.Footer>
+					</AlertDialog.Dialog>
+				</AlertDialog.Container>
+			</AlertDialog.Backdrop>
+		</div>
+	);
+}
+
+interface EditFormValues {
+	name: string;
+	description: string;
+	instruction: string;
+}
+
+function SubAgentEditForm({
+	agent: initial,
+	onSave,
+	isLoading,
+	onCancel,
+}: {
+	agent: SubAgentResponse;
+	onSave: (v: {
+		name: string | null;
+		description: string;
+		instruction: string;
+	}) => void;
+	isLoading: boolean;
+	onCancel: () => void;
+}) {
+	const { t } = useTranslation();
+
+	const {
+		control,
+		handleSubmit,
+		formState: { isSubmitting },
+	} = useForm<EditFormValues>({
+		mode: "onSubmit",
+		reValidateMode: "onChange",
+		defaultValues: {
+			name: initial.name,
+			description: initial.description ?? "",
+			instruction: initial.instruction ?? "",
+		},
+	});
+
+	const onSubmit = (values: EditFormValues) => {
+		onSave({
+			name: values.name.trim() || null,
+			description: values.description.trim(),
+			instruction: values.instruction.trim(),
+		});
+	};
+
+	return (
+		<div className="h-full w-full overflow-y-auto p-4 sm:p-6">
+			<Card>
+				<Card.Header>
+					<h2 className="text-xl font-semibold text-foreground">
+						{t("editSubAgent")}
+					</h2>
+				</Card.Header>
+				<Card.Content>
+					<Form
+						validationBehavior="aria"
+						onSubmit={handleSubmit(onSubmit)}
+					>
+						<Fieldset>
+							<Fieldset.Group>
+								<Controller
+									name="name"
+									control={control}
+									rules={{
+										required: t("validationNameRequired"),
+										validate: (v) =>
+											v.trim()
+												? true
+												: t("validationNameRequired"),
+									}}
+									render={({ field, fieldState }) => (
+										<TextField
+											className="w-full"
+											variant="secondary"
+											isRequired
+											validationBehavior="aria"
+											isInvalid={Boolean(
+												fieldState.error,
+											)}
+										>
+											<Label>{t("subAgentName")}</Label>
+											<Input
+												value={field.value}
+												onChange={(e) =>
+													field.onChange(
+														e.target.value,
+													)
+												}
+												onBlur={field.onBlur}
+												variant="secondary"
+											/>
+											{fieldState.error && (
+												<FieldError>
+													{fieldState.error.message}
+												</FieldError>
+											)}
+										</TextField>
+									)}
+								/>
+								<Controller
+									name="description"
+									control={control}
+									rules={{
+										required: t(
+											"validationDescriptionRequired",
+										),
+										validate: (v) =>
+											v.trim()
+												? true
+												: t(
+														"validationDescriptionRequired",
+													),
+									}}
+									render={({ field, fieldState }) => (
+										<TextField
+											className="w-full"
+											variant="secondary"
+											isRequired
+											validationBehavior="aria"
+											isInvalid={Boolean(
+												fieldState.error,
+											)}
+										>
+											<Label>
+												{t("subAgentDescription")}
+											</Label>
+											<Input
+												value={field.value}
+												onChange={(e) =>
+													field.onChange(
+														e.target.value,
+													)
+												}
+												onBlur={field.onBlur}
+												placeholder={t(
+													"subAgentDescriptionPlaceholder",
+												)}
+												variant="secondary"
+											/>
+											{fieldState.error && (
+												<FieldError>
+													{fieldState.error.message}
+												</FieldError>
+											)}
+										</TextField>
+									)}
+								/>
+							</Fieldset.Group>
+						</Fieldset>
+
+						<Fieldset>
+							<Fieldset.Group>
+								<Controller
+									name="instruction"
+									control={control}
+									rules={{
+										required: t(
+											"validationInstructionRequired",
+										),
+										validate: (v) =>
+											v.trim()
+												? true
+												: t(
+														"validationInstructionRequired",
+													),
+									}}
+									render={({ field, fieldState }) => (
+										<TextField
+											className="w-full"
+											variant="secondary"
+											isRequired
+											validationBehavior="aria"
+											isInvalid={Boolean(
+												fieldState.error,
+											)}
+										>
+											<Label>
+												{t("subAgentInstruction")}
+											</Label>
+											<TextArea
+												value={field.value}
+												onChange={(e) =>
+													field.onChange(
+														e.target.value,
+													)
+												}
+												onBlur={field.onBlur}
+												placeholder={t(
+													"subAgentInstructionPlaceholder",
+												)}
+												variant="secondary"
+												className="min-h-48"
+											/>
+											{fieldState.error && (
+												<FieldError>
+													{fieldState.error.message}
+												</FieldError>
+											)}
+										</TextField>
+									)}
+								/>
+							</Fieldset.Group>
+						</Fieldset>
+
+						<div className="flex justify-end gap-2 pt-2">
+							<Button
+								type="button"
+								variant="secondary"
+								onPress={onCancel}
+							>
+								{t("cancel")}
+							</Button>
+							<Button
+								type="submit"
+								isDisabled={isLoading || isSubmitting}
+							>
+								{isLoading ? t("saving") : t("save")}
+							</Button>
+						</div>
+					</Form>
+				</Card.Content>
+			</Card>
+		</div>
+	);
+}

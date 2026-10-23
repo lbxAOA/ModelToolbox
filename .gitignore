@@ -1,0 +1,26 @@
+# Build outputs
+/target/
+**/target/
+node_modules/
+**/node_modules/
+dist/
+**/dist/
+
+# Test and development output
+coverage/
+playwright-report/
+test-results/
+*.log
+
+# Local configuration and IDE state
+.env
+.env.*
+!.env.example
+.idea/
+.vscode/
+!.vscode/extensions.json
+.DS_Store
+
+# Local agent state and indexes
+.codegraph/
+.hermes/

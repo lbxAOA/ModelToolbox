@@ -1,0 +1,31 @@
+[package]
+name = "model-toolbox-cli"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "CLI tool for managing Code Agent configurations"
+
+[[bin]]
+name = "model-toolbox-cli"
+path = "src/main.rs"
+
+[dependencies]
+model-toolbox-core = { path = "../core" }
+model-toolbox-agents = { path = "../agents" }
+model-toolbox-cc-plugins = { path = "../cc-plugins" }
+model-toolbox-usage = { path = "../usage" }
+skill = { path = "../skill" }
+skill-audit = { path = "../skill-audit", features = [ "from-path" ] }
+
+clap = { workspace = true }
+tabled = { workspace = true }
+anyhow = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tokio = { workspace = true, features = [ "rt", "macros" ] }
+
+[dev-dependencies]
+assert_cmd = { workspace = true }
+predicates = { workspace = true }
+tempfile = { workspace = true }

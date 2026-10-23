@@ -1,0 +1,717 @@
+import { expect, test, type Page } from "@playwright/test";
+import type { SkillDirectoryDiffResponse } from "../src/generated/dto";
+import { agentInfo, e2eApiUrl, installMocks } from "./mocks";
+
+const modifiedSkillDiff: SkillDirectoryDiffResponse = {
+	identical: false,
+	base_hash: "base",
+	target_hash: "target",
+	files: [
+		{
+			path: "SKILL.md",
+			change: "modified",
+			before: "# Skill\n\nold instruction\n",
+			after: "# Skill\n\nnew instruction\n",
+			content_omitted: false,
+		},
+	],
+	files_omitted: 0,
+};
+
+function skillVersionRow(page: Page, path: string) {
+	return page
+		.locator("[data-skill-version-choice]")
+		.filter({ hasText: path });
+}
+
+test("different local copies show a file and line diff", async ({ page }) => {
+	const mocks = await installMocks(page);
+	mocks.addSkill("react-pro", "gemini");
+	mocks.addSkillLocation(
+		"react-pro",
+		"claude",
+		"/tmp/e2e/.z-claude/skills/react-pro/SKILL.md",
+	);
+	mocks.setSkillDiff(
+		"/tmp/e2e/.cursor/skills/react-pro/SKILL.md",
+		modifiedSkillDiff,
+	);
+	mocks.setSkillDiffError("/tmp/e2e/.gemini/skills/react-pro/SKILL.md");
+	await page.goto("/skills");
+
+	await page.getByRole("option", { name: "react-pro" }).click();
+	await expect(
+		page.getByRole("button", { name: /Compare and unify local copies/ }),
+	).toBeVisible();
+	const unavailableCopies = page
+		.getByRole("status")
+		.filter({ hasText: "Some skill copies could not be compared" });
+	await expect(unavailableCopies).toHaveAttribute("data-slot", "alert-root");
+	const localRequests = mocks
+		.getSkillDiffRequests()
+		.filter((request) => request.reference.kind === "installed");
+	expect(localRequests).toEqual([
+		{
+			reference: {
+				kind: "installed",
+				source_path: "/tmp/e2e/.claude/skills/react-pro/SKILL.md",
+			},
+			installed_paths: [
+				"/tmp/e2e/.cursor/skills/react-pro/SKILL.md",
+				"/tmp/e2e/.gemini/skills/react-pro/SKILL.md",
+				"/tmp/e2e/.z-claude/skills/react-pro/SKILL.md",
+			],
+			scope: "global",
+			project_root: null,
+		},
+	]);
+	await unavailableCopies
+		.getByRole("button", { name: "Check Again" })
+		.click();
+	const retryToast = page.locator('[data-slot="toast"]');
+	await expect(retryToast).toContainText(
+		"Some skill copies could not be compared",
+	);
+
+	await expect(page.locator('[data-diff-kind="removed"]')).toHaveCount(0);
+	await page
+		.getByRole("button", { name: /Compare and unify local copies/ })
+		.click();
+	const versionSelector = page.getByRole("radiogroup", {
+		name: "Choose the version to keep",
+	});
+	await expect(versionSelector).toBeVisible();
+	await expect(page.getByRole("columnheader")).toHaveCount(0);
+	await expect(
+		skillVersionRow(page, "/tmp/e2e/.claude/skills/react-pro"),
+	).toBeVisible();
+	await expect(
+		skillVersionRow(page, "/tmp/e2e/.claude/skills/react-pro").locator(
+			"[data-skill-version-location]",
+		),
+	).toHaveCount(1);
+	const fileChanges = page.getByRole("button", {
+		name: "Review file changes",
+	});
+	await expect(fileChanges).toHaveAttribute("aria-expanded", "false");
+	await fileChanges.click();
+	await expect(
+		page.getByRole("button", { name: "Hide file changes" }),
+	).toHaveAttribute("aria-expanded", "true");
+	await expect(page.locator('[data-diff-kind="removed"]')).toContainText(
+		"old instruction",
+	);
+	await expect(page.locator('[data-diff-kind="added"]')).toContainText(
+		"new instruction",
+	);
+});
+
+test("a changed file link shows both targets and their status", async ({
+	page,
+}) => {
+	const mocks = await installMocks(page);
+	mocks.setSkillDiff("/tmp/e2e/.cursor/skills/react-pro/SKILL.md", {
+		identical: false,
+		base_hash: "base",
+		target_hash: "target",
+		files: [
+			{
+				path: "references/example.html",
+				change: "modified",
+				before: null,
+				after: null,
+				before_link: {
+					target: "../../../docs/example.html",
+					status: "valid",
+				},
+				after_link: {
+					target: "../../../docs/missing.html",
+					status: "broken",
+				},
+				content_omitted: false,
+			},
+			{
+				path: "references/materialized.html",
+				change: "modified",
+				before: null,
+				after: null,
+				before_link: {
+					target: "../../../docs/materialized.html",
+					status: "valid",
+				},
+				content_omitted: false,
+			},
+		],
+		files_omitted: 0,
+	});
+	await page.goto("/skills");
+
+	await page.getByRole("option", { name: "react-pro" }).click();
+	await page
+		.getByRole("button", { name: /Compare and unify local copies/ })
+		.click();
+	await page.getByRole("button", { name: "Review file changes" }).click();
+
+	const changedLink = page
+		.locator("[data-skill-diff-file]")
+		.filter({ hasText: "references/example.html" });
+	await expect(
+		changedLink.locator('[data-skill-link-status="valid"]'),
+	).toContainText("../../../docs/example.html");
+	await expect(
+		changedLink.locator('[data-skill-link-status="broken"]'),
+	).toContainText("../../../docs/missing.html");
+	await expect(
+		changedLink.locator('[data-skill-link-status="valid"]'),
+	).not.toContainText("Link available");
+	await expect(
+		changedLink.locator('[data-skill-link-status="broken"]'),
+	).toContainText("Target not found");
+	const materializedFile = page
+		.locator("[data-skill-diff-file]")
+		.filter({ hasText: "references/materialized.html" });
+	await expect(
+		materializedFile.locator('[data-skill-file-version="before"]'),
+	).toContainText("Symlink");
+	await expect(
+		materializedFile.locator('[data-skill-file-version="before"]'),
+	).toContainText("../../../docs/materialized.html");
+	await expect(
+		materializedFile.locator('[data-skill-file-version="after"]'),
+	).toContainText("Regular file");
+	await expect(page.locator("[data-diff-kind]")).toHaveCount(0);
+	await expect(
+		page.getByText("Keep current links", { exact: true }),
+	).toBeVisible();
+	await expect(
+		page.getByText("Convert links to copies", { exact: true }),
+	).toBeVisible();
+});
+
+test("a hard-link change keeps the file content diff visible", async ({
+	page,
+}) => {
+	const mocks = await installMocks(page);
+	mocks.setSkillDiff("/tmp/e2e/.cursor/skills/react-pro/SKILL.md", {
+		identical: false,
+		base_hash: "base",
+		target_hash: "target",
+		files: [
+			{
+				path: "templates/input.json",
+				change: "modified",
+				before: "old value\n",
+				after: "new value\n",
+				before_hard_link: {
+					peers: ["templates/default.json"],
+				},
+				after_hard_link: {
+					peers: ["templates/shared.json"],
+				},
+				content_omitted: false,
+			},
+		],
+		files_omitted: 0,
+	});
+	await page.goto("/skills");
+
+	await page.getByRole("option", { name: "react-pro" }).click();
+	await page
+		.getByRole("button", { name: /Compare and unify local copies/ })
+		.click();
+	await page.getByRole("button", { name: "Review file changes" }).click();
+
+	await expect(page.locator("[data-skill-hard-link]")).toHaveCount(2);
+	await expect(page.locator('[data-diff-kind="removed"]')).toContainText(
+		"old value",
+	);
+	await expect(page.locator('[data-diff-kind="added"]')).toContainText(
+		"new value",
+	);
+});
+
+test("copy mode materializes every location including its reference", async ({
+	page,
+}) => {
+	const mocks = await installMocks(page);
+	const linkedCopyDiff: SkillDirectoryDiffResponse = {
+		...modifiedSkillDiff,
+		files: [
+			...modifiedSkillDiff.files,
+			{
+				path: "linked-notes.txt",
+				change: "modified",
+				before: null,
+				after: null,
+				before_link: { target: "notes.txt", status: "valid" },
+				after_link: {
+					target: "archive/notes.txt",
+					status: "valid",
+				},
+				content_omitted: false,
+			},
+		],
+	};
+	mocks.addSkillLocation(
+		"react-pro",
+		"claude",
+		"/tmp/e2e/.z-claude/skills/react-pro/SKILL.md",
+	);
+	mocks.setSkillDiff(
+		"/tmp/e2e/.cursor/skills/react-pro/SKILL.md",
+		linkedCopyDiff,
+	);
+	mocks.setSkillDiff(
+		"/tmp/e2e/.z-claude/skills/react-pro/SKILL.md",
+		linkedCopyDiff,
+	);
+	await page.goto("/skills");
+
+	await page.getByRole("option", { name: "react-pro" }).click();
+	await page
+		.getByRole("button", { name: /Compare and unify local copies/ })
+		.click();
+	await expect(page.locator("[data-skill-version-choice]")).toHaveCount(2);
+	await skillVersionRow(page, "/tmp/e2e/.cursor/skills/react-pro").click();
+	await page.getByText("Convert links to copies", { exact: true }).click();
+	await page
+		.getByRole("button", { name: "Use selected version in 3 locations" })
+		.click();
+
+	await expect
+		.poll(() => mocks.getSkillCopyResolutionRequests())
+		.toEqual([
+			{
+				reference: {
+					kind: "installed",
+					source_path: "/tmp/e2e/.cursor/skills/react-pro/SKILL.md",
+				},
+				expected_reference_hash: "target",
+				storage_mode: "copy",
+				targets: [
+					{
+						source_path:
+							"/tmp/e2e/.claude/skills/react-pro/SKILL.md",
+						expected_hash: "base",
+					},
+					{
+						source_path:
+							"/tmp/e2e/.cursor/skills/react-pro/SKILL.md",
+						expected_hash: "target",
+					},
+					{
+						source_path:
+							"/tmp/e2e/.z-claude/skills/react-pro/SKILL.md",
+						expected_hash: "target",
+					},
+				],
+				scope: "global",
+				project_root: null,
+			},
+		]);
+	await expect(
+		page.getByText("Local skill copies now use the selected version"),
+	).toBeVisible();
+	await expect(
+		page.getByRole("button", { name: /Compare and unify local copies/ }),
+	).toHaveCount(0);
+});
+
+test("a linked local version can be retained and materialized as copies", async ({
+	page,
+}) => {
+	await page.setViewportSize({ width: 960, height: 720 });
+	const mocks = await installMocks(page);
+	const linkedPath = "/tmp/e2e/.claude/skills/react-pro/SKILL.md";
+	mocks.setSkillSymlink("react-pro", "claude");
+	mocks.setSkillDiff(
+		"/tmp/e2e/.cursor/skills/react-pro/SKILL.md",
+		modifiedSkillDiff,
+	);
+	await page.goto("/skills");
+
+	await page.getByRole("option", { name: "react-pro" }).click();
+	await expect.poll(() => mocks.getSkillDiffRequests()).toHaveLength(1);
+	await page
+		.getByRole("button", { name: /Compare and unify local copies/ })
+		.click();
+	await expect(
+		skillVersionRow(page, "/tmp/e2e/.claude/skills/react-pro"),
+	).toBeVisible();
+	const linkedVersion = skillVersionRow(
+		page,
+		"/tmp/e2e/.claude/skills/react-pro",
+	);
+	await expect(linkedVersion).toContainText("Claude");
+	await expect(linkedVersion).toContainText("Symlink");
+	const linkedLocation = page.locator(
+		'[data-skill-location="/tmp/e2e/.claude/skills/react-pro/SKILL.md"]',
+	);
+	await expect(linkedLocation).toContainText(
+		"~/WorkSpace/Fldicoahkiin_Github/flacier-hype/vendor/eric-way/.agents/skills/react-pro",
+	);
+	await expect
+		.poll(() =>
+			linkedLocation.evaluate(
+				(element) => element.scrollWidth <= element.clientWidth,
+			),
+		)
+		.toBe(true);
+	await expect(page.locator("[data-skill-diff-file]")).toHaveCount(0);
+	await page.getByRole("button", { name: "Review file changes" }).click();
+	await expect(page.locator("[data-skill-diff-file]")).toHaveCount(1);
+	await linkedVersion.click();
+	await expect(page.locator('[data-diff-kind="added"]')).toContainText(
+		"old instruction",
+	);
+	await expect(page.locator('[data-diff-kind="removed"]')).toContainText(
+		"new instruction",
+	);
+	await page.getByText("Convert links to copies", { exact: true }).click();
+	await skillVersionRow(page, "/tmp/e2e/.claude/skills/react-pro").click();
+	await page
+		.getByRole("button", { name: "Use selected version in 2 locations" })
+		.click();
+
+	await expect
+		.poll(() => mocks.getSkillCopyResolutionRequests())
+		.toEqual([
+			{
+				reference: {
+					kind: "installed",
+					source_path: linkedPath,
+				},
+				expected_reference_hash: "base",
+				storage_mode: "copy",
+				targets: [
+					{
+						source_path: linkedPath,
+						expected_hash: "base",
+					},
+					{
+						source_path:
+							"/tmp/e2e/.cursor/skills/react-pro/SKILL.md",
+						expected_hash: "target",
+					},
+				],
+				scope: "global",
+				project_root: null,
+			},
+		]);
+});
+
+test("agent filters do not hide copies from comparison or resolution", async ({
+	page,
+}) => {
+	const mocks = await installMocks(page);
+	mocks.setSkillDiff(
+		"/tmp/e2e/.cursor/skills/react-pro/SKILL.md",
+		modifiedSkillDiff,
+	);
+	await page.goto("/skills?agent=claude");
+	await expect(
+		page.getByRole("button", { name: "Change agent filter" }),
+	).toBeVisible();
+	await expect(
+		page.getByRole("button", { name: "Clear agent filter" }),
+	).toBeVisible();
+	await expect(
+		page
+			.getByRole("button", { name: "Change agent filter" })
+			.locator("button"),
+	).toHaveCount(0);
+
+	await page.getByRole("option", { name: "react-pro" }).click();
+	await page
+		.getByRole("button", { name: /Compare and unify local copies/ })
+		.click();
+	await skillVersionRow(page, "/tmp/e2e/.cursor/skills/react-pro").click();
+	await page
+		.getByRole("button", { name: "Use selected version in 2 locations" })
+		.click();
+
+	await expect
+		.poll(() => mocks.getSkillCopyResolutionRequests())
+		.toEqual([
+			{
+				reference: {
+					kind: "installed",
+					source_path: "/tmp/e2e/.cursor/skills/react-pro/SKILL.md",
+				},
+				expected_reference_hash: "target",
+				storage_mode: "preserve",
+				targets: [
+					{
+						source_path:
+							"/tmp/e2e/.claude/skills/react-pro/SKILL.md",
+						expected_hash: "base",
+					},
+				],
+				scope: "global",
+				project_root: null,
+			},
+		]);
+});
+
+test("a changed local copy disables stale choices until comparison refreshes", async ({
+	page,
+}) => {
+	const mocks = await installMocks(page);
+	const cursorPath = "/tmp/e2e/.cursor/skills/react-pro/SKILL.md";
+	mocks.setSkillDiff(cursorPath, modifiedSkillDiff);
+	await page.goto("/skills");
+
+	await page.getByRole("option", { name: "react-pro" }).click();
+	await page
+		.getByRole("button", { name: /Compare and unify local copies/ })
+		.click();
+	const cursorChoice = skillVersionRow(
+		page,
+		"/tmp/e2e/.cursor/skills/react-pro",
+	);
+	await cursorChoice.click();
+	mocks.setSkillDiff(cursorPath, {
+		...modifiedSkillDiff,
+		target_hash: "changed",
+	});
+	mocks.setSkillDiffDelay(1_500);
+	await page
+		.getByRole("button", { name: "Use selected version in 2 locations" })
+		.click();
+
+	await expect(
+		page.getByText(/A skill copy changed while you were reviewing it/),
+	).toBeVisible();
+	await expect(cursorChoice.getByRole("radio")).toBeDisabled();
+	await expect(cursorChoice.getByRole("radio")).toBeEnabled({
+		timeout: 5_000,
+	});
+	await expect(
+		page.getByRole("button", {
+			name: "Use selected version in 2 locations",
+		}),
+	).toBeDisabled();
+	await expect(
+		page.getByText("Local skill copies now use the selected version"),
+	).toHaveCount(0);
+});
+
+test("project details unify mixed-scope copies with an explicit root", async ({
+	page,
+}) => {
+	const mocks = await installMocks(page);
+	const projectSourcePath = "/tmp/e2e/demo/.claude/skills/react-pro/SKILL.md";
+	mocks.addProjectSkill("react-pro", "claude", projectSourcePath, [
+		"/tmp/e2e/.claude/skills/react-pro/SKILL.md",
+	]);
+	mocks.setSkillDiff(projectSourcePath, modifiedSkillDiff);
+	await page.goto("/projects/p1?type=skill&resource=react-pro");
+	await page
+		.getByRole("button", { name: /Compare and unify local copies/ })
+		.click();
+	await skillVersionRow(page, "/tmp/e2e/.claude/skills/react-pro").click();
+	await page
+		.getByRole("button", { name: "Use selected version in 2 locations" })
+		.click();
+
+	await expect
+		.poll(() => mocks.getSkillCopyResolutionRequests())
+		.toEqual([
+			{
+				reference: {
+					kind: "installed",
+					source_path: "/tmp/e2e/.claude/skills/react-pro/SKILL.md",
+				},
+				expected_reference_hash: "base",
+				storage_mode: "preserve",
+				targets: [
+					{
+						source_path: projectSourcePath,
+						expected_hash: "target",
+					},
+				],
+				scope: "all",
+				project_root: "/tmp/e2e/demo",
+			},
+		]);
+	await expect(
+		page.getByText("Local skill copies now use the selected version"),
+	).toBeVisible();
+});
+
+test("large skill differences stay within the render budget", async ({
+	page,
+}) => {
+	const mocks = await installMocks(page);
+	const files = Array.from({ length: 101 }, (_, index) => ({
+		path: `${String(index).padStart(3, "0")}.txt`,
+		change: "modified" as const,
+		before: "old",
+		after: index === 0 ? "line\n".repeat(2_500) : "new",
+		content_omitted: false,
+	}));
+	mocks.setSkillDiff("/tmp/e2e/.cursor/skills/react-pro/SKILL.md", {
+		identical: false,
+		base_hash: "base",
+		target_hash: "target",
+		files,
+		files_omitted: 3,
+	});
+	await page.goto("/skills");
+
+	await page.getByRole("option", { name: "react-pro" }).click();
+	await page
+		.getByRole("button", { name: /Compare and unify local copies/ })
+		.click();
+	await page.getByRole("button", { name: "Review file changes" }).click();
+
+	await expect(page.locator("[data-skill-diff-file]")).toHaveCount(100);
+	await expect(
+		page.getByText("Text preview was omitted to keep the diff responsive."),
+	).toBeVisible();
+	await expect(
+		page.getByText("4 additional changed files are not shown."),
+	).toBeVisible();
+});
+
+test("matching copies show every concrete path and relationship", async ({
+	page,
+}) => {
+	const mocks = await installMocks(page);
+	const agents = [
+		["claude", "Claude"],
+		["cursor", "Cursor"],
+		["gemini", "Gemini"],
+		["codex", "Codex"],
+		["opencode", "OpenCode"],
+		["cline", "Cline"],
+		["warp", "Warp"],
+		["kimi", "Kimi"],
+		["antigravity", "Antigravity"],
+	] as const;
+	await page.route(e2eApiUrl("/agents"), (route) =>
+		route.fulfill({
+			status: 200,
+			contentType: "application/json",
+			body: JSON.stringify(
+				agents.map(([id, name]) => agentInfo(id, name)),
+			),
+		}),
+	);
+	await page.route(e2eApiUrl("/agents/availability"), (route) =>
+		route.fulfill({
+			status: 200,
+			contentType: "application/json",
+			body: JSON.stringify(
+				agents.map(([id]) => ({
+					id,
+					has_global_directory: true,
+					has_cli: true,
+					is_available: true,
+				})),
+			),
+		}),
+	);
+	for (const [agent] of agents.slice(2)) {
+		mocks.addSkill("react-pro", agent);
+	}
+	for (const [agent] of agents.slice(1)) {
+		mocks.setSkillDiff(`/tmp/e2e/.${agent}/skills/react-pro/SKILL.md`, {
+			...modifiedSkillDiff,
+			target_hash: "shared-target",
+		});
+	}
+	await page.setViewportSize({ width: 900, height: 800 });
+	await page.goto("/skills");
+
+	await page.getByRole("option", { name: "react-pro" }).click();
+	await page
+		.getByRole("button", { name: /Compare and unify local copies/ })
+		.click();
+
+	const sharedVersion = page
+		.locator("[data-skill-version-choice]")
+		.filter({ hasText: "Used in 8 locations" });
+	await expect(sharedVersion).toBeVisible();
+	await expect(sharedVersion.getByRole("radio")).toHaveAccessibleName(
+		/Keep version from/,
+	);
+	await expect(sharedVersion.getByText("+5", { exact: true })).toBeVisible();
+	await expect(
+		sharedVersion.getByText("Independent copy", { exact: true }),
+	).toHaveCount(8);
+	await expect(
+		sharedVersion.locator("[data-skill-version-location]"),
+	).toHaveCount(8);
+	await expect(
+		sharedVersion.getByText("/tmp/e2e/.cursor/skills/react-pro", {
+			exact: true,
+		}),
+	).toBeVisible();
+	await expect(
+		sharedVersion.getByText("/tmp/e2e/.warp/skills/react-pro", {
+			exact: true,
+		}),
+	).toBeVisible();
+
+	const versionSelector = page.getByRole("radiogroup", {
+		name: "Choose the version to keep",
+	});
+	const selectorGeometry = await versionSelector.evaluate((element) => {
+		return {
+			overflow: element.scrollWidth - element.clientWidth,
+			selectorWidth: element.getBoundingClientRect().width,
+			selectorClass: element.className,
+		};
+	});
+	if (selectorGeometry.overflow > 1) {
+		throw new Error(
+			`skill version selector overflowed: ${JSON.stringify(selectorGeometry)}`,
+		);
+	}
+});
+
+test("only one location diff is mounted at a time", async ({ page }) => {
+	const mocks = await installMocks(page);
+	for (let index = 0; index < 31; index += 1) {
+		const sourcePath = `/tmp/e2e/.copy-${index}/skills/react-pro/SKILL.md`;
+		mocks.addSkillLocation("react-pro", "claude", sourcePath);
+		mocks.setSkillDiff(sourcePath, {
+			...modifiedSkillDiff,
+			target_hash: `target-${index}`,
+			files: [
+				{
+					...modifiedSkillDiff.files[0]!,
+					path: `${index}.txt`,
+				},
+			],
+		});
+	}
+	await page.goto("/skills");
+
+	await page.getByRole("option", { name: "react-pro" }).click();
+	await page
+		.getByRole("button", { name: /Compare and unify local copies/ })
+		.click();
+	await page.getByRole("button", { name: "Review file changes" }).click();
+
+	await expect(page.locator("[data-skill-diff-file]")).toHaveCount(1);
+	const comparisonChoices = page.getByRole("radiogroup", {
+		name: "Choose a version to compare",
+	});
+	const comparisonOptions = comparisonChoices.getByRole("radio");
+	await expect(comparisonOptions.nth(0)).toHaveAccessibleName(/\/tmp\/e2e/);
+	await comparisonOptions.nth(0).press("ArrowRight");
+	await comparisonOptions.nth(1).press("Space");
+	await expect(comparisonOptions.nth(1)).toBeChecked();
+	await skillVersionRow(page, "/tmp/e2e/.copy-0/skills/react-pro").click();
+	await expect(
+		page.getByRole("button", {
+			name: "Use selected version in 33 locations",
+		}),
+	).toBeEnabled();
+	await expect(page.locator("[data-skill-diff-file]")).toHaveCount(1);
+	await expect(
+		page.locator("[data-skill-diff-file] code").first(),
+	).toHaveText("0.txt");
+});

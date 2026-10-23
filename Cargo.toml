@@ -1,0 +1,98 @@
+[workspace]
+members = [
+	"crates/agents",
+	"crates/core",
+	"crates/cli",
+	"crates/api",
+	"crates/skills-sh",
+	"crates/mcp-catalog",
+	"crates/skill",
+	"crates/skill-audit",
+	"crates/git",
+	"crates/json",
+	"crates/markdown",
+	"crates/inference",
+	"crates/cc-plugins",
+	"crates/usage",
+	"crates/prompt",
+	"crates/desktop/src-tauri",
+	"crates/model-toolbox-v2",
+]
+resolver = "2"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+authors = [ "Eric Qu <akarachen>" ]
+license = "MIT"
+repository = "https://github.com/lbxAOA/ModelToolbox"
+
+[workspace.dependencies]
+# Core dependencies
+serde = { version = "1.0", features = [ "derive" ] }
+serde_json = { version = "1.0", features = [ "preserve_order" ] }
+jsonc-parser = { version = "0.33.1", features = [
+	"cst",
+	"serde",
+	"serde_json",
+] }
+thiserror = "2.0"
+dirs = "7.0"
+libc = "0.2"
+ts-rs = "12.0.1"
+which = "8"
+log = "0.4.31"
+windows-sys = "0.61.2"
+futures = "0.3"
+base64 = "0.23"
+flate2 = "1.0"
+semver = "1.0.28"
+sha2 = "0.11"
+tar = "0.4"
+
+# CLI dependencies
+clap = { version = "4.5", features = [ "derive" ] }
+tabled = "0.21"
+anyhow = "1.0"
+colored = "3.0"
+
+# HTTP dependencies
+reqwest = { version = "0.13", features = [ "json", "stream" ] }
+url = "2.5"
+
+# Async and shared platform dependencies
+tokio = "1"
+keyring = { version = "3", features = [
+	"apple-native",
+	"windows-native",
+	"linux-native",
+] }
+uuid = { version = "1", features = [ "v4" ] }
+tauri = "2"
+
+# Testing dependencies
+tempfile = "3.10"
+assert_cmd = "2.2"
+predicates = "3.1"
+
+# YAML parsing
+serde_yaml = "0.9"
+
+# Skill security audit — crates.io 1.14 sub-crates are out of sync.
+yara-x = { git = "https://github.com/VirusTotal/yara-x", rev = "e0096cd41fe16be76ca5321618ac880d1894b086", default-features = false, features = [ "constant-folding", "exact-atoms", "fast-regexp" ] }
+
+# TOML parsing
+toml = "1.0"
+toml_edit = "0.25"
+
+# Interactive CLI
+inquire = "0.9"
+
+# Date/time
+chrono = { version = "0.4", features = [ "serde" ] }
+
+# Git hooks
+cargo-husky = { version = "1", default-features = false, features = [
+	"precommit-hooks",
+	"run-cargo-test",
+] }

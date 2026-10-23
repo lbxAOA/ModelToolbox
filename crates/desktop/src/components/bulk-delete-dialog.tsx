@@ -1,0 +1,228 @@
+import { ExclamationTriangleIcon } from "@heroicons/react/24/solid";
+import { Button, Modal, Spinner, toast } from "@heroui/react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
+import type { ConfigSource } from "../generated/dto";
+import { useApi } from "../hooks/use-api";
+import { useMcpGroups, useSkillGroups } from "../hooks/use-resource-groups";
+import { BulkOperationError, bulkFailureItemsLabel } from "../lib/bulk-errors";
+import { invalidateMcpQueries } from "../requests/mcps";
+import { invalidateSkillQueries } from "../requests/skills";
+import { capture } from "../lib/analytics";
+
+interface BulkDeleteItem {
+	name: string;
+	agent?: string | null;
+	source?: ConfigSource | null;
+	source_path?: string | null;
+}
+
+interface BulkDeleteGroup {
+	key: string;
+	items: BulkDeleteItem[];
+	resourceType?: "mcp" | "skill";
+}
+
+interface BulkDeleteDialogProps {
+	groups: BulkDeleteGroup[];
+	isOpen: boolean;
+	onClose: () => void;
+	onSuccess: () => void;
+	resourceType: "mcp" | "skill" | "mixed";
+	projectPath?: string;
+}
+
+export function BulkDeleteDialog({
+	groups,
+	isOpen,
+	onClose,
+	onSuccess,
+	resourceType,
+	projectPath,
+}: BulkDeleteDialogProps) {
+	const { t } = useTranslation();
+	const api = useApi();
+	const queryClient = useQueryClient();
+	const { pruneAssignments: pruneSkillAssignments } = useSkillGroups();
+	const { pruneAssignments: pruneMcpAssignments } = useMcpGroups();
+
+	const deleteMutation = useMutation({
+		mutationFn: async () => {
+			const promises: Promise<void>[] = [];
+			const deleteInfo: Array<{
+				name: string;
+				agent: string;
+				scope: string;
+			}> = [];
+			const seen = new Set<string>();
+			for (const group of groups) {
+				const groupResourceType = group.resourceType ?? resourceType;
+				for (const item of group.items) {
+					if (!item.agent) continue;
+					const scope: "global" | "project" = item.source ?? "global";
+					const projectRoot =
+						scope === "project" ? projectPath : undefined;
+					const dedupKey =
+						groupResourceType === "skill" && item.source_path
+							? `skill:${item.source_path}:${scope}`
+							: groupResourceType === "skill"
+								? `skill:${item.agent}:${group.key}:${scope}`
+								: `${groupResourceType}:${item.agent}:${item.name}:${scope}`;
+					if (seen.has(dedupKey)) continue;
+					seen.add(dedupKey);
+					if (groupResourceType === "mcp") {
+						promises.push(
+							api.mcps.delete(
+								item.name,
+								item.agent,
+								scope,
+								projectRoot,
+							),
+						);
+					} else {
+						promises.push(
+							api.skills.delete(
+								item.agent,
+								group.key,
+								scope,
+								projectRoot,
+							),
+						);
+					}
+					deleteInfo.push({
+						name: item.name,
+						agent: item.agent,
+						scope,
+					});
+				}
+			}
+			const results = await Promise.allSettled(promises);
+			const failures = results
+				.map((r, i) => ({ result: r, info: deleteInfo[i] }))
+				.filter(({ result }) => result.status === "rejected")
+				.map(({ result, info }) => ({
+					...info,
+					reason: (result as PromiseRejectedResult).reason,
+				}));
+			if (failures.length > 0) {
+				console.error(
+					`${resourceType} bulk delete failures:`,
+					failures,
+				);
+				throw new BulkOperationError(
+					failures.map(({ name, agent }) => ({ name, agent })),
+				);
+			}
+			return { deleted: promises.length };
+		},
+		onSuccess: async (data) => {
+			if (resourceType === "mcp" || resourceType === "mixed") {
+				await invalidateMcpQueries(queryClient);
+			}
+			if (resourceType === "skill" || resourceType === "mixed") {
+				await invalidateSkillQueries(queryClient);
+			}
+			// The deleted resources are gone; drop their group assignments
+			// so a same-named resource added later starts out ungrouped.
+			// group.key is the member key (skill name / mcp mergeKey).
+			const deletedGroups = groups.filter((group) =>
+				group.items.some((item) => item.agent),
+			);
+			const keysOf = (kind: "mcp" | "skill") =>
+				deletedGroups
+					.filter(
+						(group) =>
+							(group.resourceType ?? resourceType) === kind,
+					)
+					.map((group) => group.key);
+			const skillKeys = keysOf("skill");
+			const mcpKeys = keysOf("mcp");
+			if (skillKeys.length > 0) await pruneSkillAssignments(skillKeys);
+			if (mcpKeys.length > 0) await pruneMcpAssignments(mcpKeys);
+			const eventName =
+				resourceType === "mcp"
+					? "mcp server deleted"
+					: resourceType === "skill"
+						? "skill deleted"
+						: "resources deleted";
+			capture(eventName, {
+				resource_type: resourceType,
+				count: data.deleted,
+			});
+			onSuccess();
+			onClose();
+		},
+		onError: (error) => {
+			console.error("Bulk delete mutation error:", error);
+			if (error instanceof BulkOperationError) {
+				toast.danger(
+					t(
+						"bulkDeleteFailedItems",
+						bulkFailureItemsLabel(error.failures),
+					),
+				);
+				return;
+			}
+			toast.danger(
+				error instanceof Error ? error.message : t("bulkDeleteFailed"),
+			);
+		},
+	});
+
+	const confirmKey =
+		resourceType === "mcp"
+			? "bulkDeleteMcpConfirm"
+			: resourceType === "skill"
+				? "bulkDeleteSkillConfirm"
+				: "bulkDeleteMixedConfirm";
+
+	return (
+		<Modal.Backdrop isOpen={isOpen} onOpenChange={onClose}>
+			<Modal.Container>
+				<Modal.Dialog>
+					<Modal.CloseTrigger />
+					<Modal.Header>
+						<div className="flex items-center gap-2">
+							<ExclamationTriangleIcon className="size-5 text-warning" />
+							<Modal.Heading>
+								{t("bulkDeleteConfirmTitle")}
+							</Modal.Heading>
+						</div>
+					</Modal.Header>
+					<Modal.Body>
+						<p className="text-sm text-muted">
+							{t(confirmKey, {
+								count: groups.length,
+							})}
+						</p>
+					</Modal.Body>
+					<Modal.Footer>
+						<Button
+							slot="close"
+							variant="secondary"
+							size="md"
+							onPress={onClose}
+							isDisabled={deleteMutation.isPending}
+							className="min-h-[44px]"
+						>
+							{t("cancel")}
+						</Button>
+						<Button
+							variant="danger"
+							size="md"
+							onPress={() => deleteMutation.mutate()}
+							isDisabled={deleteMutation.isPending}
+							className="min-h-[44px] min-w-[120px]"
+						>
+							{deleteMutation.isPending ? (
+								<Spinner size="sm" color="current" />
+							) : (
+								t("deleteSelected")
+							)}
+						</Button>
+					</Modal.Footer>
+				</Modal.Dialog>
+			</Modal.Container>
+		</Modal.Backdrop>
+	);
+}

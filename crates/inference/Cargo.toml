@@ -1,0 +1,36 @@
+[package]
+name = "model-toolbox-inference"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "Inference provider configuration storage for model-toolbox"
+
+[dependencies]
+model-toolbox-json = { path = "../json" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+toml_edit = { workspace = true }
+thiserror = { workspace = true }
+dirs = { workspace = true }
+reqwest = { workspace = true }
+sha2 = "0.11"
+url = { workspace = true }
+keyring = { workspace = true }
+uuid = { workspace = true }
+sqlx = { version = "0.9", features = [ "sqlite", "runtime-tokio", "migrate" ] }
+tokio = { workspace = true, features = [
+	"macros",
+	"rt",
+	"rt-multi-thread",
+	"time",
+] }
+tauri = { workspace = true, optional = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+serde_json = { workspace = true }
+
+[features]
+default = [  ]
+tauri = [ "dep:tauri" ]

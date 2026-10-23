@@ -1,0 +1,684 @@
+import {
+	mutationOptions,
+	type QueryClient,
+	queryOptions,
+} from "@tanstack/react-query";
+import type {
+	CCMarketplaceAddRequest,
+	CCMarketplaceListResponse,
+	CCMarketplaceMutationResponse,
+	CCPluginConfigResponse,
+	CCPluginDetailResponse,
+	CCPluginInstallRequest,
+	CCPluginInstallResponse,
+	CCPluginListResponse,
+	CCPluginMarketResponse,
+	CCPluginResponse,
+	CCPluginUninstallRequest,
+	CCPluginUninstallResponse,
+	CCPluginUpdateRequest,
+	CCPluginUpdateResponse,
+	CCPluginUpdateConfigRequest,
+	CCPluginOpenSkillInEditorRequest,
+} from "../generated/dto";
+import type { ApiClient } from "./client";
+import { queryKeys } from "./keys";
+
+interface PluginListQueryParams {
+	api: ApiClient;
+	enabled?: boolean;
+	staleTime?: number;
+}
+
+export function pluginListQueryOptions({
+	api,
+	enabled = true,
+	staleTime = 30_000,
+}: PluginListQueryParams) {
+	return queryOptions({
+		queryKey: queryKeys.plugins.list(),
+		queryFn: () => api.plugins.list(),
+		enabled,
+		staleTime,
+	});
+}
+
+interface PluginDetailQueryParams {
+	api: ApiClient;
+	pluginId?: string;
+	enabled?: boolean;
+	staleTime?: number;
+}
+
+export function pluginDetailQueryOptions({
+	api,
+	pluginId,
+	enabled = true,
+	staleTime = 30_000,
+}: PluginDetailQueryParams) {
+	const isEnabled = enabled && Boolean(pluginId);
+	return queryOptions({
+		queryKey: pluginId
+			? queryKeys.plugins.detail(pluginId)
+			: queryKeys.plugins.detailDisabled(),
+		queryFn: () => api.plugins.detail(pluginId!),
+		enabled: isEnabled,
+		staleTime,
+	});
+}
+
+interface PluginMarketQueryParams {
+	api: ApiClient;
+	enabled?: boolean;
+	staleTime?: number;
+}
+
+export function pluginMarketQueryOptions({
+	api,
+	enabled = true,
+	staleTime = 30_000,
+}: PluginMarketQueryParams) {
+	return queryOptions({
+		queryKey: queryKeys.plugins.market(),
+		queryFn: () => api.plugins.listMarket(),
+		enabled,
+		staleTime,
+	});
+}
+
+export async function invalidatePluginQueries(
+	queryClient: QueryClient,
+	pluginId?: string,
+) {
+	await queryClient.invalidateQueries({
+		queryKey: queryKeys.plugins.all(),
+	});
+	await queryClient.invalidateQueries({
+		queryKey: queryKeys.plugins.market(),
+	});
+
+	if (pluginId) {
+		await queryClient.invalidateQueries({
+			queryKey: queryKeys.plugins.detail(pluginId),
+		});
+	}
+}
+
+export async function invalidatePluginSkillQueries(queryClient: QueryClient) {
+	await queryClient.invalidateQueries({
+		queryKey: queryKeys.skills.all(),
+	});
+}
+
+interface InstallPluginMutationParams {
+	api: ApiClient;
+	queryClient: QueryClient;
+	onSuccess?: (
+		data: CCPluginInstallResponse,
+		variables: CCPluginInstallRequest,
+	) => void | Promise<void>;
+}
+
+export function installPluginMutationOptions({
+	api,
+	queryClient,
+	onSuccess,
+}: InstallPluginMutationParams) {
+	return mutationOptions({
+		mutationFn: (body: CCPluginInstallRequest) => api.plugins.install(body),
+		onSuccess: async (data, variables) => {
+			await invalidatePluginQueries(queryClient, variables.plugin_id);
+			await onSuccess?.(data, variables);
+		},
+	});
+}
+
+interface MarketplaceListQueryParams {
+	api: ApiClient;
+	enabled?: boolean;
+	staleTime?: number;
+}
+
+export function marketplaceListQueryOptions({
+	api,
+	enabled = true,
+	staleTime = 30_000,
+}: MarketplaceListQueryParams) {
+	return queryOptions({
+		queryKey: queryKeys.plugins.marketplaces(),
+		queryFn: () => api.plugins.listMarketplaces(),
+		enabled,
+		staleTime,
+	});
+}
+
+export async function invalidateMarketplaceQueries(queryClient: QueryClient) {
+	await queryClient.invalidateQueries({
+		queryKey: queryKeys.plugins.marketplaces(),
+	});
+	await queryClient.invalidateQueries({
+		queryKey: queryKeys.plugins.market(),
+	});
+	await queryClient.invalidateQueries({
+		queryKey: queryKeys.plugins.all(),
+	});
+	await queryClient.invalidateQueries({
+		queryKey: queryKeys.skills.all(),
+	});
+}
+
+interface AddMarketplaceMutationParams {
+	api: ApiClient;
+	queryClient: QueryClient;
+	onSuccess?: (
+		data: CCMarketplaceMutationResponse,
+		variables: CCMarketplaceAddRequest,
+	) => void | Promise<void>;
+}
+
+export function addMarketplaceMutationOptions({
+	api,
+	queryClient,
+	onSuccess,
+}: AddMarketplaceMutationParams) {
+	return mutationOptions({
+		mutationFn: (body: CCMarketplaceAddRequest) =>
+			api.plugins.addMarketplace(body),
+		onSuccess: async (data, variables) => {
+			await invalidateMarketplaceQueries(queryClient);
+			await onSuccess?.(data, variables);
+		},
+	});
+}
+
+interface RemoveMarketplaceMutationParams {
+	api: ApiClient;
+	queryClient: QueryClient;
+	onSuccess?: (
+		data: CCMarketplaceMutationResponse,
+		name: string,
+	) => void | Promise<void>;
+}
+
+export function removeMarketplaceMutationOptions({
+	api,
+	queryClient,
+	onSuccess,
+}: RemoveMarketplaceMutationParams) {
+	return mutationOptions({
+		mutationFn: (name: string) => api.plugins.removeMarketplace(name),
+		onSuccess: async (data, name) => {
+			await invalidateMarketplaceQueries(queryClient);
+			await invalidatePluginQueries(queryClient);
+			await onSuccess?.(data, name);
+		},
+	});
+}
+
+interface UpdateMarketplaceOneMutationParams {
+	api: ApiClient;
+	queryClient: QueryClient;
+	onSuccess?: (
+		data: CCMarketplaceMutationResponse,
+		name: string,
+	) => void | Promise<void>;
+}
+
+export function updateMarketplaceOneMutationOptions({
+	api,
+	queryClient,
+	onSuccess,
+}: UpdateMarketplaceOneMutationParams) {
+	return mutationOptions({
+		mutationFn: (name: string) => api.plugins.updateMarketplaceOne(name),
+		onSuccess: async (data, name) => {
+			await invalidateMarketplaceQueries(queryClient);
+			await onSuccess?.(data, name);
+		},
+	});
+}
+
+interface UpdateMarketplaceMutationParams {
+	api: ApiClient;
+	queryClient: QueryClient;
+	onSuccess?: (
+		data: Awaited<ReturnType<ApiClient["plugins"]["updateMarketplace"]>>,
+	) => void | Promise<void>;
+}
+
+export function updateMarketplaceMutationOptions({
+	api,
+	queryClient,
+	onSuccess,
+}: UpdateMarketplaceMutationParams) {
+	return mutationOptions({
+		mutationFn: () => api.plugins.updateMarketplace(),
+		onSuccess: async (data) => {
+			await queryClient.invalidateQueries({
+				queryKey: queryKeys.plugins.market(),
+			});
+			await onSuccess?.(data);
+		},
+	});
+}
+
+export type { CCMarketplaceListResponse };
+
+interface CliStatusQueryParams {
+	api: ApiClient;
+	enabled?: boolean;
+	staleTime?: number;
+}
+
+export function cliStatusQueryOptions({
+	api,
+	enabled = true,
+	staleTime = 60_000,
+}: CliStatusQueryParams) {
+	return queryOptions({
+		queryKey: queryKeys.plugins.cliStatus(),
+		queryFn: () => api.plugins.getCliStatus(),
+		enabled,
+		staleTime,
+	});
+}
+
+export interface PluginToggleSnapshot {
+	previousPlugins?: CCPluginListResponse;
+	previousDetail?: CCPluginDetailResponse;
+	previousMarket?: CCPluginMarketResponse[];
+}
+
+export function updatePluginCaches(
+	queryClient: QueryClient,
+	pluginId: string,
+	currentPlugin: CCPluginResponse,
+	updater: (entry: CCPluginResponse) => CCPluginResponse,
+) {
+	queryClient.setQueryData<CCPluginListResponse | undefined>(
+		queryKeys.plugins.list(),
+		(existing) =>
+			existing
+				? {
+						...existing,
+						plugins: existing.plugins.map((entry) =>
+							entry.id === pluginId ? updater(entry) : entry,
+						),
+					}
+				: existing,
+	);
+	queryClient.setQueryData<CCPluginDetailResponse | undefined>(
+		queryKeys.plugins.detail(pluginId),
+		(existing) =>
+			existing
+				? {
+						...existing,
+						...updater(existing),
+					}
+				: existing,
+	);
+	queryClient.setQueryData<CCPluginMarketResponse[] | undefined>(
+		queryKeys.plugins.market(),
+		(existing) =>
+			existing?.map((entry) =>
+				entry.id === pluginId
+					? { ...entry, enabled: updater(currentPlugin).enabled }
+					: entry,
+			) ?? existing,
+	);
+}
+
+interface TogglePluginMutationParams {
+	api: ApiClient;
+	queryClient: QueryClient;
+	pluginId: string;
+	currentPlugin: CCPluginResponse;
+	onSuccess?: (data: CCPluginResponse) => void | Promise<void>;
+}
+
+function togglePluginMutationOptions(
+	enabled: boolean,
+	mutationFn: (pluginId: string) => Promise<CCPluginResponse>,
+	{
+		queryClient,
+		pluginId,
+		currentPlugin,
+		onSuccess,
+	}: Omit<TogglePluginMutationParams, "api">,
+) {
+	return mutationOptions({
+		mutationFn,
+		onMutate: async (): Promise<PluginToggleSnapshot> => {
+			await Promise.all([
+				queryClient.cancelQueries({
+					queryKey: queryKeys.plugins.list(),
+				}),
+				queryClient.cancelQueries({
+					queryKey: queryKeys.plugins.detail(pluginId),
+				}),
+				queryClient.cancelQueries({
+					queryKey: queryKeys.plugins.market(),
+				}),
+			]);
+
+			const previousPlugins =
+				queryClient.getQueryData<CCPluginListResponse>(
+					queryKeys.plugins.list(),
+				);
+			const previousDetail =
+				queryClient.getQueryData<CCPluginDetailResponse>(
+					queryKeys.plugins.detail(pluginId),
+				);
+			const previousMarket = queryClient.getQueryData<
+				CCPluginMarketResponse[]
+			>(queryKeys.plugins.market());
+
+			updatePluginCaches(
+				queryClient,
+				pluginId,
+				currentPlugin,
+				(entry) => ({
+					...entry,
+					enabled,
+				}),
+			);
+
+			return {
+				previousPlugins,
+				previousDetail,
+				previousMarket,
+			};
+		},
+		onSuccess: async (data: CCPluginResponse) => {
+			updatePluginCaches(
+				queryClient,
+				pluginId,
+				currentPlugin,
+				(entry) => ({
+					...entry,
+					...data,
+				}),
+			);
+			await invalidatePluginSkillQueries(queryClient);
+			await onSuccess?.(data);
+		},
+		onError: (
+			_error: Error,
+			_pluginId: string,
+			context: PluginToggleSnapshot | undefined,
+		) => {
+			queryClient.setQueryData(
+				queryKeys.plugins.list(),
+				context?.previousPlugins,
+			);
+			queryClient.setQueryData(
+				queryKeys.plugins.detail(pluginId),
+				context?.previousDetail,
+			);
+			queryClient.setQueryData(
+				queryKeys.plugins.market(),
+				context?.previousMarket,
+			);
+		},
+	});
+}
+
+export function enablePluginMutationOptions({
+	api,
+	queryClient,
+	pluginId,
+	currentPlugin,
+	onSuccess,
+}: TogglePluginMutationParams) {
+	return togglePluginMutationOptions(true, (id) => api.plugins.enable(id), {
+		queryClient,
+		pluginId,
+		currentPlugin,
+		onSuccess,
+	});
+}
+
+export function disablePluginMutationOptions({
+	api,
+	queryClient,
+	pluginId,
+	currentPlugin,
+	onSuccess,
+}: TogglePluginMutationParams) {
+	return togglePluginMutationOptions(false, (id) => api.plugins.disable(id), {
+		queryClient,
+		pluginId,
+		currentPlugin,
+		onSuccess,
+	});
+}
+
+interface UpdatePluginMutationParams {
+	api: ApiClient;
+	queryClient: QueryClient;
+	onSuccess?: (
+		data: CCPluginUpdateResponse,
+		variables: CCPluginUpdateRequest,
+	) => void | Promise<void>;
+}
+
+export function updatePluginMutationOptions({
+	api,
+	queryClient,
+	onSuccess,
+}: UpdatePluginMutationParams) {
+	return mutationOptions({
+		mutationFn: (body: CCPluginUpdateRequest) => api.plugins.update(body),
+		onSuccess: async (data, variables) => {
+			await invalidatePluginQueries(queryClient, variables.plugin_id);
+			await onSuccess?.(data, variables);
+		},
+	});
+}
+
+/**
+ * Reinstall is intentionally not a backend operation. We chain the
+ * existing uninstall + install endpoints client-side so we never grow a
+ * separate state machine that can drift from the official CLI semantics.
+ */
+export interface ReinstallPluginVariables {
+	plugin_id: string;
+	scope: string;
+	/** Preserve persistent data dir between uninstall and install. */
+	keep_data?: boolean;
+}
+
+export interface ReinstallPluginResult {
+	success: boolean;
+	message: string;
+}
+
+interface ReinstallPluginMutationParams {
+	api: ApiClient;
+	queryClient: QueryClient;
+	onSuccess?: (
+		data: ReinstallPluginResult,
+		variables: ReinstallPluginVariables,
+	) => void | Promise<void>;
+}
+
+export function reinstallPluginMutationOptions({
+	api,
+	queryClient,
+	onSuccess,
+}: ReinstallPluginMutationParams) {
+	return mutationOptions({
+		mutationFn: async (
+			variables: ReinstallPluginVariables,
+		): Promise<ReinstallPluginResult> => {
+			await api.plugins.uninstall({
+				plugin_id: variables.plugin_id,
+				scope: variables.scope,
+				keep_data: variables.keep_data ?? false,
+				prune: false,
+			});
+			const installed = await api.plugins.install({
+				plugin_id: variables.plugin_id,
+				scope: variables.scope,
+			});
+			return {
+				success: installed.success,
+				message: installed.message,
+			};
+		},
+		onSuccess: async (data, variables) => {
+			await invalidatePluginQueries(queryClient, variables.plugin_id);
+			await invalidatePluginSkillQueries(queryClient);
+			await onSuccess?.(data, variables);
+		},
+		onError: async (_error, variables) => {
+			await invalidatePluginQueries(queryClient, variables.plugin_id);
+			await invalidatePluginSkillQueries(queryClient);
+		},
+	});
+}
+
+interface UninstallPluginMutationParams {
+	api: ApiClient;
+	queryClient: QueryClient;
+	onSuccess?: (
+		data: CCPluginUninstallResponse,
+		variables: CCPluginUninstallRequest,
+	) => void | Promise<void>;
+}
+
+export function uninstallPluginMutationOptions({
+	api,
+	queryClient,
+	onSuccess,
+}: UninstallPluginMutationParams) {
+	return mutationOptions({
+		mutationFn: (body: CCPluginUninstallRequest) =>
+			api.plugins.uninstall(body),
+		onSuccess: async (data, variables) => {
+			await invalidatePluginQueries(queryClient, variables.plugin_id);
+			await invalidatePluginSkillQueries(queryClient);
+			await onSuccess?.(data, variables);
+		},
+	});
+}
+
+interface BulkUninstallPluginsMutationParams {
+	api: ApiClient;
+	queryClient: QueryClient;
+	onSuccess?: (removedPluginIds: Set<string>) => void | Promise<void>;
+	onError?: (error: Error) => void | Promise<void>;
+}
+
+export function bulkUninstallPluginsMutationOptions({
+	api,
+	queryClient,
+	onSuccess,
+	onError,
+}: BulkUninstallPluginsMutationParams) {
+	return mutationOptions({
+		mutationFn: async (plugins: CCPluginResponse[]) => {
+			const requests = plugins.flatMap((plugin) =>
+				Array.from(
+					new Map(
+						plugin.scopes.map((scopeInfo) => [
+							scopeInfo.scope,
+							scopeInfo,
+						]),
+					).keys(),
+				).map((scope) => ({
+					pluginId: plugin.id,
+					scope,
+					request: api.plugins.uninstall({
+						plugin_id: plugin.id,
+						scope,
+						keep_data: false,
+						prune: false,
+					}),
+				})),
+			);
+			const results = await Promise.allSettled(
+				requests.map((entry) => entry.request),
+			);
+			const failures = results
+				.map((result, index) => ({
+					result,
+					pluginId: requests[index]?.pluginId,
+					scope: requests[index]?.scope,
+				}))
+				.filter(
+					(
+						entry,
+					): entry is {
+						result: PromiseRejectedResult;
+						pluginId: string;
+						scope: string;
+					} => entry.result.status === "rejected",
+				);
+
+			if (failures.length > 0) {
+				throw new Error(
+					failures
+						.map(({ pluginId, scope, result }) => {
+							const reason =
+								result.reason instanceof Error
+									? result.reason.message
+									: String(result.reason);
+
+							return `${pluginId} (${scope}): ${reason}`;
+						})
+						.join("; "),
+				);
+			}
+
+			return new Set(plugins.map((plugin) => plugin.id));
+		},
+		onSuccess: async (removedPluginIds) => {
+			await invalidatePluginQueries(queryClient);
+			await invalidatePluginSkillQueries(queryClient);
+			await onSuccess?.(removedPluginIds);
+		},
+		onError: async (error) => {
+			await invalidatePluginQueries(queryClient);
+			await invalidatePluginSkillQueries(queryClient);
+			await onError?.(
+				error instanceof Error ? error : new Error(String(error)),
+			);
+		},
+	});
+}
+
+interface UpdatePluginConfigMutationParams {
+	api: ApiClient;
+	onSuccess?: (
+		data: CCPluginConfigResponse,
+		variables: { body: CCPluginUpdateConfigRequest },
+	) => void | Promise<void>;
+}
+
+export function updatePluginConfigMutationOptions({
+	api,
+	onSuccess,
+}: UpdatePluginConfigMutationParams) {
+	return mutationOptions({
+		mutationFn: ({ body }: { body: CCPluginUpdateConfigRequest }) =>
+			api.plugins.updateConfig(body),
+		onSuccess,
+	});
+}
+
+interface OpenSkillInEditorMutationParams {
+	api: ApiClient;
+	onError?: (error: Error) => void | Promise<void>;
+}
+
+export function openSkillInEditorMutationOptions({
+	api,
+	onError,
+}: OpenSkillInEditorMutationParams) {
+	return mutationOptions({
+		mutationFn: (body: CCPluginOpenSkillInEditorRequest) =>
+			api.plugins.openSkillInEditor(body),
+		onError,
+	});
+}
