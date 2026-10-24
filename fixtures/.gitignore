@@ -1,4 +1,8 @@
 *
 !.gitignore
 !.cline/
+!.cline/mcp.json
 !.agents/
+!.agents/skills/
+!.agents/skills/vercel-react-best-practices/
+!.agents/skills/vercel-react-best-practices/SKILL.md
