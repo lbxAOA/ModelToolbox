@@ -35,6 +35,14 @@ fn project_skills_paths(root: &Path) -> Vec<PathBuf> {
 	vec![root.join(".hermes/skills"), root.join(".agents/skills")]
 }
 
+fn global_skill_write_path() -> Option<PathBuf> {
+	hermes_home().map(|home| home.join("skills"))
+}
+
+fn project_skill_write_path(root: &Path) -> Option<PathBuf> {
+	Some(root.join(".hermes/skills"))
+}
+
 fn global_rule_paths() -> Vec<PathBuf> {
 	hermes_home()
 		.map(|home| vec![home.join("SOUL.md")])
@@ -361,11 +369,11 @@ pub const DESCRIPTOR: AgentDescriptor = AgentDescriptor {
 	},
 	global_skill_paths: Some(GlobalSkillPaths {
 		read: global_skills_paths,
-		write: None,
+		write: global_skill_write_path,
 	}),
 	project_skill_paths: Some(ProjectSkillPaths {
 		read: project_skills_paths,
-		write: None,
+		write: project_skill_write_path,
 	}),
 	load_sub_agents: load_sub_agents_noop,
 	save_sub_agents: save_sub_agents_noop,
