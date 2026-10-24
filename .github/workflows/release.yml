@@ -52,12 +52,18 @@ jobs:
                       exit 1
                   fi
 
-                  PREVIOUS_TAG="$(git describe --tags --abbrev=0 "${RELEASE_TAG}^")"
-                  # 1.9.1 includes the full update history since 1.2.1, including beta releases.
-                  if [[ "$VERSION" == "1.9.1" ]]; then
-                      PREVIOUS_TAG="v1.2.1"
+                  PREVIOUS_TAG=""
+                  if PREVIOUS_TAG=$(git describe --tags --abbrev=0 "${RELEASE_TAG}^" 2>/dev/null); then
+                      # 1.9.1 includes the full update history since 1.2.1.
+                      if [[ "$VERSION" == "1.9.1" ]]; then
+                          PREVIOUS_TAG="v1.2.1"
+                      fi
+                      git merge-base --is-ancestor "$PREVIOUS_TAG" "$RELEASE_TAG"
+                      CHANGELOG_RANGE="${PREVIOUS_TAG}..${RELEASE_TAG}"
+                  else
+                      # The first release has no previous tag; include the full history.
+                      CHANGELOG_RANGE="--root"
                   fi
-                  git merge-base --is-ancestor "$PREVIOUS_TAG" "$RELEASE_TAG"
                   PRERELEASE=false
                   if [[ "$VERSION" == *-* ]]; then
                       PRERELEASE=true
@@ -66,7 +72,7 @@ jobs:
                   echo "commit_sha=$COMMIT_SHA" >> "$GITHUB_OUTPUT"
                   echo "prerelease=$PRERELEASE" >> "$GITHUB_OUTPUT"
                   echo "published_at=$(git show -s --format=%cI "$COMMIT_SHA")" >> "$GITHUB_OUTPUT"
-                  echo "range=${PREVIOUS_TAG}..${RELEASE_TAG}" >> "$GITHUB_OUTPUT"
+                  echo "range=$CHANGELOG_RANGE" >> "$GITHUB_OUTPUT"
                   echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
             - name: Setup Bun
