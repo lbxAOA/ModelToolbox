@@ -459,7 +459,9 @@ test("exports and merges a versioned prompt backup from settings", async ({
 	const downloadPromise = page.waitForEvent("download");
 	await page.getByRole("button", { name: "Export backup" }).click();
 	const download = await downloadPromise;
-	expect(download.suggestedFilename()).toMatch(/^model-toolbox-prompts-.*\.json$/);
+	expect(download.suggestedFilename()).toMatch(
+		/^model-toolbox-prompts-.*\.json$/,
+	);
 
 	const chooserPromise = page.waitForEvent("filechooser");
 	await page.getByRole("button", { name: "Import backup" }).click();

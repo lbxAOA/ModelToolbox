@@ -54,7 +54,10 @@ export function normalizeReleaseAssetName(
 	version: string,
 ): string {
 	const name = basename(sourcePath);
-	if (name !== "model-toolbox.app.tar.gz" && name !== "model-toolbox.app.tar.gz.sig") {
+	if (
+		name !== "model-toolbox.app.tar.gz" &&
+		name !== "model-toolbox.app.tar.gz.sig"
+	) {
 		return name;
 	}
 	const suffix = name.endsWith(".sig") ? ".sig" : "";

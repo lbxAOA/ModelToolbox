@@ -1,0 +1,2 @@
+# Keep SQLx migration bytes stable across platforms; checksums include line endings.
+crates/inference/migrations/*.sql text eol=lf

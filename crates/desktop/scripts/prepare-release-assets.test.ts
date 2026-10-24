@@ -23,8 +23,14 @@ describe("release assets", () => {
 	it("builds updater entries only from the staged signed artifacts", () => {
 		const version = "1.9.0-beta.1";
 		const signatures = new Map([
-			[`model_toolbox_${version}_aarch64.app.tar.gz.sig`, "mac-arm-signature\n"],
-			[`model_toolbox_${version}_x64.app.tar.gz.sig`, "mac-x64-signature"],
+			[
+				`model_toolbox_${version}_aarch64.app.tar.gz.sig`,
+				"mac-arm-signature\n",
+			],
+			[
+				`model_toolbox_${version}_x64.app.tar.gz.sig`,
+				"mac-x64-signature",
+			],
 			[`model_toolbox_${version}_amd64.AppImage.sig`, "linux-signature"],
 			[`model_toolbox_${version}_x64-setup.exe.sig`, "windows-signature"],
 		]);

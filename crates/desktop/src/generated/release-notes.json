@@ -9,15 +9,15 @@
 				"zh-Hans": "修复技能页面闪退",
 				"zh-Hant": "修正技能頁面閃退"
 			},
-			"announcement": {
-				"en": "1.9.2 is a fix release for 1.9.1. The rebuilt next version is still being designed.",
-				"zh-Hans": "1.9.2 是 1.9.1 的修复版本，全新重构的下一版本仍在设计中。",
-				"zh-Hant": "1.9.2 是 1.9.1 的修正版本，全新重構的下一版本仍在設計中。"
-			},
 			"summary": {
 				"en": "Fix the macOS app quitting as soon as the Skills page opens, and update dependencies.",
 				"zh-Hans": "修复 macOS 上一打开技能页面应用就退出的问题，并更新依赖。",
 				"zh-Hant": "修正 macOS 上一開啟技能頁面應用程式就結束的問題，並更新相依套件。"
+			},
+			"announcement": {
+				"en": "1.9.2 is a fix release for 1.9.1. The rebuilt next version is still being designed.",
+				"zh-Hans": "1.9.2 是 1.9.1 的修复版本，全新重构的下一版本仍在设计中。",
+				"zh-Hant": "1.9.2 是 1.9.1 的修正版本，全新重構的下一版本仍在設計中。"
 			},
 			"highlights": [
 				{
@@ -61,15 +61,15 @@
 				"zh-Hans": "界面重构与功能更新",
 				"zh-Hant": "介面重構與功能更新"
 			},
-			"announcement": {
-				"en": "1.9.1 will be the final release of model-toolbox v1.x. The next version will be rebuilt from the ground up, including the interface. Stay tuned.",
-				"zh-Hans": "1.9.1 将会是 model-toolbox v1.x 的最后一个版本，下一版本将从底层到界面彻底重构，敬请期待。",
-				"zh-Hant": "1.9.1 將會是 model-toolbox v1.x 的最後一個版本，下一版本將從底層到介面徹底重構，敬請期待。"
-			},
 			"summary": {
 				"en": "Rebuild the home, resource lists, and market pages. Add local prompts, rule history, an MCP market, and usage reports, with improved Skill source sync and cross-agent management.",
 				"zh-Hans": "重构首页、资源列表和市场页面，新增本地提示词库、规则版本记录、MCP 市场和用量统计，完善 Skill 来源同步与跨 Agent 管理。",
 				"zh-Hant": "重構首頁、資源列表和市場頁面，新增本機提示詞庫、規則版本記錄、MCP 市場與用量統計，完善 Skill 來源同步與跨 Agent 管理。"
+			},
+			"announcement": {
+				"en": "1.9.1 will be the final release of model-toolbox v1.x. The next version will be rebuilt from the ground up, including the interface. Stay tuned.",
+				"zh-Hans": "1.9.1 将会是 model-toolbox v1.x 的最后一个版本，下一版本将从底层到界面彻底重构，敬请期待。",
+				"zh-Hant": "1.9.1 將會是 model-toolbox v1.x 的最後一個版本，下一版本將從底層到介面徹底重構，敬請期待。"
 			},
 			"highlights": [
 				{
@@ -397,15 +397,15 @@
 				"zh-Hans": "新增 Hermes Agent 与 CLion 支持",
 				"zh-Hant": "新增 Hermes Agent 與 CLion 支援"
 			},
-			"announcement": {
-				"en": "ModelToolbox 0.1.0 introduces Hermes Agent as a first-class integration and adds CLion as a dedicated JetBrains AI entry.",
-				"zh-Hans": "ModelToolbox 0.1.0 将 Hermes Agent 作为一等集成接入，并新增 CLion 专属 JetBrains AI 入口。",
-				"zh-Hant": "ModelToolbox 0.1.0 將 Hermes Agent 作為一等整合接入，並新增 CLion 專屬 JetBrains AI 入口。"
-			},
 			"summary": {
 				"en": "Manage Hermes MCP servers, Skills, and instruction files from one place; recognize CLion projects and direct JetBrains AI configuration to its IDE settings.",
 				"zh-Hans": "可在统一界面管理 Hermes MCP 服务、Skills 与指令文件；识别 CLion 项目，并将 JetBrains AI 配置引导至 IDE 设置。",
 				"zh-Hant": "可在統一介面管理 Hermes MCP 服務、Skills 與指令檔；識別 CLion 專案，並將 JetBrains AI 設定引導至 IDE 設定。"
+			},
+			"announcement": {
+				"en": "ModelToolbox 0.1.0 introduces Hermes Agent as a first-class integration and adds CLion as a dedicated JetBrains AI entry.",
+				"zh-Hans": "ModelToolbox 0.1.0 将 Hermes Agent 作为一等集成接入，并新增 CLion 专属 JetBrains AI 入口。",
+				"zh-Hant": "ModelToolbox 0.1.0 將 Hermes Agent 作為一等整合接入，並新增 CLion 專屬 JetBrains AI 入口。"
 			},
 			"highlights": [
 				{
