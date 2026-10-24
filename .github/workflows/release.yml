@@ -61,8 +61,9 @@ jobs:
                       git merge-base --is-ancestor "$PREVIOUS_TAG" "$RELEASE_TAG"
                       CHANGELOG_RANGE="${PREVIOUS_TAG}..${RELEASE_TAG}"
                   else
-                      # The first release has no previous tag; include the full history.
-                      CHANGELOG_RANGE="--root"
+                      # The first release has no previous tag. git-cliff v2 no
+                      # longer accepts --root, and no range means full history.
+                      CHANGELOG_RANGE=""
                   fi
                   PRERELEASE=false
                   if [[ "$VERSION" == *-* ]]; then
