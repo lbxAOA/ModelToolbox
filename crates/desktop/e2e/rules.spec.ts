@@ -105,7 +105,9 @@ test("external edits preserve the draft until the user resolves the conflict", a
 
 	await page.getByRole("button", { name: "Save" }).click();
 	await expect(
-		page.getByText("This file changed outside model-toolbox", { exact: false }),
+		page.getByText("This file changed outside model-toolbox", {
+			exact: false,
+		}),
 	).toBeVisible();
 	await expect(editor).toHaveValue("# Stale draft\n");
 	expect(mocks.getRuleContent("~/.claude/CLAUDE.md")).toBe(

@@ -41,9 +41,9 @@ describe("release notes manifest", () => {
 		expect(
 			markdown.indexOf("The final release of model-toolbox 1."),
 		).toBeGreaterThan(0);
-		expect(markdown.indexOf("The final release of model-toolbox 1.")).toBeLessThan(
-			markdown.indexOf("Preview the latest desktop changes."),
-		);
+		expect(
+			markdown.indexOf("The final release of model-toolbox 1."),
+		).toBeLessThan(markdown.indexOf("Preview the latest desktop changes."));
 		expect(markdown).toContain("這是 model-toolbox 1 的最後一個版本。");
 	});
 

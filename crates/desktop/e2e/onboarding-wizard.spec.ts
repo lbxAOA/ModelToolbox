@@ -14,7 +14,9 @@ test("closing before consent leaves the consent step for the next launch", async
 	page,
 }) => {
 	await page.goto(freshLaunchPath);
-	const wizard = page.getByRole("dialog", { name: "Welcome to model-toolbox" });
+	const wizard = page.getByRole("dialog", {
+		name: "Welcome to model-toolbox",
+	});
 
 	await expect(wizard).toBeVisible();
 	await expect(
@@ -44,7 +46,9 @@ test("fresh launch keeps release notes out of onboarding and persists consent", 
 	page,
 }) => {
 	await page.goto(freshLaunchPath);
-	const wizard = page.getByRole("dialog", { name: "Welcome to model-toolbox" });
+	const wizard = page.getByRole("dialog", {
+		name: "Welcome to model-toolbox",
+	});
 
 	await expect(wizard).toBeVisible();
 	await expect(wizard.getByText(/What's new in/)).toHaveCount(0);
@@ -75,14 +79,18 @@ test("upgrade notes are acknowledged after the user sees them", async ({
 	page,
 }) => {
 	await page.goto(upgradeLaunchPath);
-	const wizard = page.getByRole("dialog", { name: "What's New in model-toolbox" });
+	const wizard = page.getByRole("dialog", {
+		name: "What's New in model-toolbox",
+	});
 
 	await expect(wizard).toBeVisible();
 	await expect(wizard.getByText("What's new in 1.9.1")).toBeVisible();
 	await expect(
 		wizard
 			.locator("[data-slot='modal-header']")
-			.getByText(/1\.9\.1 will be the final release of model-toolbox v1\.x/),
+			.getByText(
+				/1\.9\.1 will be the final release of model-toolbox v1\.x/,
+			),
 	).toHaveCSS("font-weight", "400");
 	await expect(wizard.getByRole("heading", { level: 4 })).toHaveText([
 		"New features",
@@ -114,13 +122,17 @@ test("manual welcome replay preserves the release-note watermark", async ({
 	await page.goto("/settings?tab=application");
 	await page.getByRole("button", { name: "Show Welcome" }).click();
 
-	const wizard = page.getByRole("dialog", { name: "Welcome to model-toolbox" });
+	const wizard = page.getByRole("dialog", {
+		name: "Welcome to model-toolbox",
+	});
 	await expect(wizard).toBeVisible();
 	await wizard.getByRole("button", { name: "Close" }).click();
 	await expect(wizard).toBeHidden();
 
 	const watermark = await page.evaluate(() => {
-		const stored = sessionStorage.getItem("model-toolbox-e2e-store:default");
+		const stored = sessionStorage.getItem(
+			"model-toolbox-e2e-store:default",
+		);
 		if (!stored) return null;
 		return new Map(JSON.parse(stored)).get("lastSeenWhatsNewVersion");
 	});

@@ -63,7 +63,8 @@ export default {
 	allCategories: "全部分類",
 	uncategorized: "未分類",
 	promptLocalLibrary: "本機提示詞庫",
-	promptLocalLibraryDescription: "提示詞儲存在本機，由 model-toolbox 直接讀取。",
+	promptLocalLibraryDescription:
+		"提示詞儲存在本機，由 model-toolbox 直接讀取。",
 	promptStorageLocation: "儲存位置",
 	promptCategories: "分類",
 	promptCategoryUsage: "{{category}}，{{count}} 條提示詞",
@@ -573,7 +574,8 @@ export default {
 	usageRuntimeManagedInstallDescription: "尚未安裝",
 	usageRuntimeManualPath: "ccusage 執行檔",
 	usageRuntimeManualPathPlaceholder: "選擇 ccusage 執行檔",
-	usageRuntimeManualDescription: "選擇現有執行檔，model-toolbox 會先驗證再切換。",
+	usageRuntimeManualDescription:
+		"選擇現有執行檔，model-toolbox 會先驗證再切換。",
 	usageRuntimeUseSource: "使用{{source}}",
 	usageRuntimeUseManual: "使用此執行檔",
 	usageRuntimeInstall: "安裝 ccusage",
@@ -986,7 +988,8 @@ export default {
 		"下載遠端腳本並直接管道進 shell 執行",
 	auditEvidence_model_toolbox_reverse_shell:
 		"建立反向 shell(socket 連線 + dup2/exec)",
-	auditEvidence_model_toolbox_raw_ip_payload: "連線或從硬編碼的裸 IP 位址拉取內容",
+	auditEvidence_model_toolbox_raw_ip_payload:
+		"連線或從硬編碼的裸 IP 位址拉取內容",
 	auditEvidence_model_toolbox_external_payload_instruction:
 		"文件指示下載並執行外部二進位/腳本",
 	auditEvidence_model_toolbox_known_exfil_host:

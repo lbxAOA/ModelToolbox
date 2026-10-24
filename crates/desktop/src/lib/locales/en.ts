@@ -65,7 +65,8 @@ export default {
 	allCategories: "All categories",
 	uncategorized: "Uncategorized",
 	promptLocalLibrary: "Local prompt library",
-	promptLocalLibraryDescription: "model-toolbox stores this library on this device.",
+	promptLocalLibraryDescription:
+		"model-toolbox stores this library on this device.",
 	promptStorageLocation: "Storage location",
 	promptCategories: "Categories",
 	promptCategoryUsage: "{{category}}, {{count}} prompts",
@@ -272,7 +273,8 @@ export default {
 	openCodeProviderSynced: "OpenCode provider updated",
 	openCodeProviderSyncError: "Failed to update OpenCode provider",
 	openCodeBuiltInProvider: "Built-in provider",
-	openCodeBuiltInProviderInfo: "This credential is not managed by model-toolbox.",
+	openCodeBuiltInProviderInfo:
+		"This credential is not managed by model-toolbox.",
 	syncOpenCodeProvider: "Update OpenCode provider",
 	syncOpenCodeProviderFromInferenceProvider:
 		"Update models and config from {{name}}",
