@@ -108,7 +108,8 @@ fn parse_entry(name: &str, value: &Value) -> Option<McpServer> {
 			env: string_map(mapping, "env"),
 			timeout: u64_value(mapping, "timeout"),
 		}
-	} else if let Some(url) = string_value(mapping, "url") {
+	} else {
+		let url = string_value(mapping, "url")?;
 		if string_value(mapping, "transport").as_deref() == Some("sse") {
 			McpTransport::Sse {
 				url,
@@ -122,8 +123,6 @@ fn parse_entry(name: &str, value: &Value) -> Option<McpServer> {
 				timeout: u64_value(mapping, "timeout"),
 			}
 		}
-	} else {
-		return None;
 	};
 	let mut server = McpServer::new(name, transport);
 	server.enabled = bool_value(mapping, "enabled").unwrap_or(true);
