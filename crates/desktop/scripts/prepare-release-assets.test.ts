@@ -20,24 +20,14 @@ describe("release assets", () => {
 		).toBe("model_toolbox_1.9.0-beta.1_x64.app.tar.gz.sig");
 	});
 
-	it("builds updater entries only from the staged signed artifacts", () => {
+	it("builds Windows and Linux updater entries from the staged signed artifacts", () => {
 		const version = "1.9.0-beta.1";
 		const signatures = new Map([
-			[
-				`model_toolbox_${version}_aarch64.app.tar.gz.sig`,
-				"mac-arm-signature\n",
-			],
-			[
-				`model_toolbox_${version}_x64.app.tar.gz.sig`,
-				"mac-x64-signature",
-			],
 			[`model_toolbox_${version}_amd64.AppImage.sig`, "linux-signature"],
 			[`model_toolbox_${version}_x64-setup.exe.sig`, "windows-signature"],
 		]);
 		const assetNames = new Set([
 			...signatures.keys(),
-			`model_toolbox_${version}_aarch64.app.tar.gz`,
-			`model_toolbox_${version}_x64.app.tar.gz`,
 			`model_toolbox_${version}_amd64.AppImage`,
 			`model_toolbox_${version}_x64-setup.exe`,
 		]);
@@ -52,15 +42,15 @@ describe("release assets", () => {
 			signatures,
 		});
 
-		expect(manifest.platforms["darwin-aarch64"]).toEqual({
-			signature: "mac-arm-signature",
-			url: `https://github.com/AkaraChen/model-toolbox/releases/download/v${version}/model_toolbox_${version}_aarch64.app.tar.gz`,
-		});
 		expect(manifest.platforms["windows-x86_64-nsis"]).toEqual({
 			signature: "windows-signature",
 			url: `https://github.com/AkaraChen/model-toolbox/releases/download/v${version}/model_toolbox_${version}_x64-setup.exe`,
 		});
-		expect(Object.keys(manifest.platforms)).toHaveLength(8);
+		expect(manifest.platforms["linux-x86_64-appimage"]).toEqual({
+			signature: "linux-signature",
+			url: `https://github.com/AkaraChen/model-toolbox/releases/download/v${version}/model_toolbox_${version}_amd64.AppImage`,
+		});
+		expect(Object.keys(manifest.platforms)).toHaveLength(4);
 	});
 
 	it("fails instead of publishing an incomplete updater manifest", () => {
@@ -74,6 +64,6 @@ describe("release assets", () => {
 				assetNames: new Set(),
 				signatures: new Map(),
 			}),
-		).toThrow("darwin-aarch64");
+		).toThrow("linux-x86_64");
 	});
 });
