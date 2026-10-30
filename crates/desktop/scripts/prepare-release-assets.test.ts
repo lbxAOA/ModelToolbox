@@ -5,7 +5,7 @@ import {
 } from "./prepare-release-assets";
 
 describe("release assets", () => {
-	it("keeps both macOS updater archives when flattening artifacts", () => {
+	it("normalizes signed updater archives for every published desktop platform", () => {
 		expect(
 			normalizeReleaseAssetName(
 				"/artifacts/desktop-aarch64-apple-darwin/model-toolbox.app.tar.gz",
@@ -18,16 +18,38 @@ describe("release assets", () => {
 				"1.9.0-beta.1",
 			),
 		).toBe("model_toolbox_1.9.0-beta.1_x64.app.tar.gz.sig");
+		expect(
+			normalizeReleaseAssetName(
+				"/artifacts/desktop-x86_64-unknown-linux-gnu/model-toolbox_1.9.0-beta.1_amd64.AppImage",
+				"1.9.0-beta.1",
+			),
+		).toBe("model_toolbox_1.9.0-beta.1_amd64.AppImage");
+		expect(
+			normalizeReleaseAssetName(
+				"/artifacts/desktop-x86_64-pc-windows-msvc/model-toolbox_1.9.0-beta.1_x64-setup.exe.sig",
+				"1.9.0-beta.1",
+			),
+		).toBe("model_toolbox_1.9.0-beta.1_x64-setup.exe.sig");
 	});
 
-	it("builds Windows and Linux updater entries from the staged signed artifacts", () => {
+	it("builds cross-platform updater entries from the staged signed artifacts", () => {
 		const version = "1.9.0-beta.1";
 		const signatures = new Map([
+			[
+				`model_toolbox_${version}_aarch64.app.tar.gz.sig`,
+				"mac-arm-signature",
+			],
+			[
+				`model_toolbox_${version}_x64.app.tar.gz.sig`,
+				"mac-x64-signature",
+			],
 			[`model_toolbox_${version}_amd64.AppImage.sig`, "linux-signature"],
 			[`model_toolbox_${version}_x64-setup.exe.sig`, "windows-signature"],
 		]);
 		const assetNames = new Set([
 			...signatures.keys(),
+			`model_toolbox_${version}_aarch64.app.tar.gz`,
+			`model_toolbox_${version}_x64.app.tar.gz`,
 			`model_toolbox_${version}_amd64.AppImage`,
 			`model_toolbox_${version}_x64-setup.exe`,
 		]);
@@ -42,6 +64,14 @@ describe("release assets", () => {
 			signatures,
 		});
 
+		expect(manifest.platforms["darwin-aarch64"]).toEqual({
+			signature: "mac-arm-signature",
+			url: `https://github.com/AkaraChen/model-toolbox/releases/download/v${version}/model_toolbox_${version}_aarch64.app.tar.gz`,
+		});
+		expect(manifest.platforms["darwin-x86_64"]).toEqual({
+			signature: "mac-x64-signature",
+			url: `https://github.com/AkaraChen/model-toolbox/releases/download/v${version}/model_toolbox_${version}_x64.app.tar.gz`,
+		});
 		expect(manifest.platforms["windows-x86_64-nsis"]).toEqual({
 			signature: "windows-signature",
 			url: `https://github.com/AkaraChen/model-toolbox/releases/download/v${version}/model_toolbox_${version}_x64-setup.exe`,
@@ -50,7 +80,7 @@ describe("release assets", () => {
 			signature: "linux-signature",
 			url: `https://github.com/AkaraChen/model-toolbox/releases/download/v${version}/model_toolbox_${version}_amd64.AppImage`,
 		});
-		expect(Object.keys(manifest.platforms)).toHaveLength(4);
+		expect(Object.keys(manifest.platforms)).toHaveLength(8);
 	});
 
 	it("fails instead of publishing an incomplete updater manifest", () => {
@@ -64,6 +94,6 @@ describe("release assets", () => {
 				assetNames: new Set(),
 				signatures: new Map(),
 			}),
-		).toThrow("linux-x86_64");
+		).toThrow("darwin-aarch64");
 	});
 });
