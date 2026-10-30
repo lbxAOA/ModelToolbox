@@ -69,7 +69,7 @@
 			}
 		},
 		"updater": {
-			"pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEE1QTNFOTczODE5RDA5QjEKUldTeENaMkJjK21qcFQ3WldzZS9FenhpZ3JjZnR3TWNPc0ZQZlMwY0p0RitVT3BhTzlHMHNpd1IK",
+			"pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDI5MDE0NkExODA1NDNGQUYKUldTdlAxU0FvVVlCS1dCOWl0cFJEWGZpb3BSYVk2NXBCWFpPZWl6bnYwSDlpRER2VnlPZU1veXAK",
 			"endpoints": [
 				"https://github.com/lbxAOA/ModelToolbox/releases/latest/download/latest.json"
 			]
