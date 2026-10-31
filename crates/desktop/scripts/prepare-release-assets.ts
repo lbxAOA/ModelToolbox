@@ -54,6 +54,9 @@ export function normalizeReleaseAssetName(
 	version: string,
 ): string {
 	const name = basename(sourcePath);
+	if (name.startsWith("model-toolbox_")) {
+		return `model_toolbox_${name.slice("model-toolbox_".length)}`;
+	}
 	if (
 		name !== "model-toolbox.app.tar.gz" &&
 		name !== "model-toolbox.app.tar.gz.sig"
@@ -72,6 +75,16 @@ export function normalizeReleaseAssetName(
 
 function updaterAssets(version: string): UpdaterAsset[] {
 	return [
+		{
+			platforms: ["darwin-aarch64", "darwin-aarch64-app"],
+			assetName: `model_toolbox_${version}_aarch64.app.tar.gz`,
+			signatureName: `model_toolbox_${version}_aarch64.app.tar.gz.sig`,
+		},
+		{
+			platforms: ["darwin-x86_64", "darwin-x86_64-app"],
+			assetName: `model_toolbox_${version}_x64.app.tar.gz`,
+			signatureName: `model_toolbox_${version}_x64.app.tar.gz.sig`,
+		},
 		{
 			platforms: ["linux-x86_64", "linux-x86_64-appimage"],
 			assetName: `model_toolbox_${version}_amd64.AppImage`,
