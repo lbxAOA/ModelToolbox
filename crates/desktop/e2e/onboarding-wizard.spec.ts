@@ -94,6 +94,7 @@ test("upgrade notes are acknowledged after the user sees them", async ({
 	).toHaveCSS("font-weight", "400");
 	await expect(wizard.getByRole("heading", { level: 4 })).toHaveText([
 		"Fixes and maintenance",
+		"Known issues",
 	]);
 	await expect(
 		wizard.getByText(
