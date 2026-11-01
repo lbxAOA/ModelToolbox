@@ -84,28 +84,27 @@ test("upgrade notes are acknowledged after the user sees them", async ({
 	});
 
 	await expect(wizard).toBeVisible();
-	await expect(wizard.getByText("What's new in 1.9.1")).toBeVisible();
+	await expect(wizard.getByText("What's new in 0.1.1")).toBeVisible();
 	await expect(
 		wizard
 			.locator("[data-slot='modal-header']")
 			.getByText(
-				/1\.9\.1 will be the final release of model-toolbox v1\.x/,
+				"ModelToolbox 0.1.1 fixes update checks so beta releases are resolved from the official lbxAOA/ModelToolbox repository.",
 			),
 	).toHaveCSS("font-weight", "400");
 	await expect(wizard.getByRole("heading", { level: 4 })).toHaveText([
-		"New features",
-		"Improvements",
 		"Fixes and maintenance",
+		"Known issues",
 	]);
 	await expect(
 		wizard.getByText(
-			"1.9.1 will be the final release of model-toolbox v1.x. The next version will be rebuilt from the ground up, including the interface. Stay tuned.",
+			"ModelToolbox 0.1.1 fixes update checks so beta releases are resolved from the official lbxAOA/ModelToolbox repository.",
 			{ exact: true },
 		),
 	).toBeVisible();
 	await expect(
-		wizard.getByRole("heading", {
-			name: "Interface redesign and new features",
+		wizard.getByText("Updates follow the official repository", {
+			exact: true,
 		}),
 	).toBeVisible();
 

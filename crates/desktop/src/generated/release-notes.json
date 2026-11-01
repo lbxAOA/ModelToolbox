@@ -390,6 +390,57 @@
 			"knownIssues": []
 		},
 		{
+			"version": "0.1.1",
+			"channel": "stable",
+			"title": {
+				"en": "Correct GitHub update repository",
+				"zh-Hans": "修正 GitHub 更新仓库",
+				"zh-Hant": "修正 GitHub 更新儲存庫"
+			},
+			"summary": {
+				"en": "Update checks and generated updater links now consistently use the official GitHub repository.",
+				"zh-Hans": "更新检查和生成的更新链接现在统一使用官方 GitHub 仓库。",
+				"zh-Hant": "更新檢查與產生的更新連結現在統一使用官方 GitHub 儲存庫。"
+			},
+			"announcement": {
+				"en": "ModelToolbox 0.1.1 fixes update checks so beta releases are resolved from the official lbxAOA/ModelToolbox repository.",
+				"zh-Hans": "ModelToolbox 0.1.1 修复更新检查，使 Beta 版本从官方 lbxAOA/ModelToolbox 仓库获取。",
+				"zh-Hant": "ModelToolbox 0.1.1 修正更新檢查，使 Beta 版本從官方 lbxAOA/ModelToolbox 儲存庫取得。"
+			},
+			"highlights": [
+				{
+					"id": "official-update-repository",
+					"icon": "sync",
+					"category": "fix",
+					"title": {
+						"en": "Updates follow the official repository",
+						"zh-Hans": "更新跟踪官方仓库",
+						"zh-Hant": "更新追蹤官方儲存庫"
+					},
+					"description": {
+						"en": "Stable and beta update checks, as well as generated release asset links, now point to lbxAOA/ModelToolbox instead of the legacy repository.",
+						"zh-Hans": "稳定版和 Beta 版更新检查，以及生成的发布资源链接，现在都指向 lbxAOA/ModelToolbox，不再使用旧仓库。",
+						"zh-Hant": "穩定版與 Beta 版更新檢查，以及產生的發行資源連結，現在都指向 lbxAOA/ModelToolbox，不再使用舊儲存庫。"
+					}
+				}
+			],
+			"knownIssues": [
+				{
+					"id": "local-windows-build-toolchain",
+					"title": {
+						"en": "Local Windows builds require Microsoft C++ Build Tools",
+						"zh-Hans": "本地 Windows 构建需要 Microsoft C++ Build Tools",
+						"zh-Hant": "本機 Windows 建置需要 Microsoft C++ Build Tools"
+					},
+					"description": {
+						"en": "Install the Visual Studio C++ Build Tools workload when building locally. Hosted release builds run on GitHub Actions runners with the required toolchain.",
+						"zh-Hans": "本地构建时请安装 Visual Studio C++ Build Tools 工作负载。托管发布构建在已具备该工具链的 GitHub Actions 运行器上执行。",
+						"zh-Hant": "本機建置時請安裝 Visual Studio C++ Build Tools 工作負載。託管發行建置在已具備該工具鏈的 GitHub Actions 執行器上執行。"
+					}
+				}
+			]
+		},
+		{
 			"version": "0.1.0",
 			"channel": "stable",
 			"title": {

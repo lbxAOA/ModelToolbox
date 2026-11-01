@@ -91,7 +91,7 @@
 			case "plugin:app|name":
 				return Promise.resolve("model-toolbox");
 			case "plugin:app|version":
-				return Promise.resolve("1.9.1");
+				return Promise.resolve("0.1.1");
 			case "posthog_get_config":
 				return Promise.resolve({ key: null, host: null });
 			case "posthog_get_distinct_id":
