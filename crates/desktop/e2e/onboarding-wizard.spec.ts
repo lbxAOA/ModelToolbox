@@ -103,8 +103,8 @@ test("upgrade notes are acknowledged after the user sees them", async ({
 		),
 	).toBeVisible();
 	await expect(
-		wizard.getByRole("heading", {
-			name: "Updates follow the official repository",
+		wizard.getByText("Updates follow the official repository", {
+			exact: true,
 		}),
 	).toBeVisible();
 
