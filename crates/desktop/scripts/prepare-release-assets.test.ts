@@ -57,7 +57,7 @@ describe("release assets", () => {
 		const manifest = createUpdaterManifest({
 			version,
 			tag: `v${version}`,
-			repository: "AkaraChen/model-toolbox",
+			repository: "lbxAOA/ModelToolbox",
 			publishedAt: "2026-07-22T13:00:00Z",
 			notes: "Beta notes",
 			assetNames,
@@ -66,19 +66,19 @@ describe("release assets", () => {
 
 		expect(manifest.platforms["darwin-aarch64"]).toEqual({
 			signature: "mac-arm-signature",
-			url: `https://github.com/AkaraChen/model-toolbox/releases/download/v${version}/model_toolbox_${version}_aarch64.app.tar.gz`,
+			url: `https://github.com/lbxAOA/ModelToolbox/releases/download/v${version}/model_toolbox_${version}_aarch64.app.tar.gz`,
 		});
 		expect(manifest.platforms["darwin-x86_64"]).toEqual({
 			signature: "mac-x64-signature",
-			url: `https://github.com/AkaraChen/model-toolbox/releases/download/v${version}/model_toolbox_${version}_x64.app.tar.gz`,
+			url: `https://github.com/lbxAOA/ModelToolbox/releases/download/v${version}/model_toolbox_${version}_x64.app.tar.gz`,
 		});
 		expect(manifest.platforms["windows-x86_64-nsis"]).toEqual({
 			signature: "windows-signature",
-			url: `https://github.com/AkaraChen/model-toolbox/releases/download/v${version}/model_toolbox_${version}_x64-setup.exe`,
+			url: `https://github.com/lbxAOA/ModelToolbox/releases/download/v${version}/model_toolbox_${version}_x64-setup.exe`,
 		});
 		expect(manifest.platforms["linux-x86_64-appimage"]).toEqual({
 			signature: "linux-signature",
-			url: `https://github.com/AkaraChen/model-toolbox/releases/download/v${version}/model_toolbox_${version}_amd64.AppImage`,
+			url: `https://github.com/lbxAOA/ModelToolbox/releases/download/v${version}/model_toolbox_${version}_amd64.AppImage`,
 		});
 		expect(Object.keys(manifest.platforms)).toHaveLength(8);
 	});
@@ -88,7 +88,7 @@ describe("release assets", () => {
 			createUpdaterManifest({
 				version: "1.9.0-beta.1",
 				tag: "v1.9.0-beta.1",
-				repository: "AkaraChen/model-toolbox",
+				repository: "lbxAOA/ModelToolbox",
 				publishedAt: "2026-07-22T13:00:00Z",
 				notes: "Beta notes",
 				assetNames: new Set(),

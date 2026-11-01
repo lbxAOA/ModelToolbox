@@ -9,7 +9,7 @@ use tauri_plugin_updater::UpdaterExt;
 use time::format_description::well_known::Rfc3339;
 
 const GITHUB_RELEASES_API: &str =
-	"https://api.github.com/repos/AkaraChen/model-toolbox/releases?per_page=100";
+	"https://api.github.com/repos/lbxAOA/ModelToolbox/releases?per_page=100";
 const GITHUB_API_ACCEPT: &str = "application/vnd.github+json";
 const GITHUB_API_VERSION: &str = "2022-11-28";
 const UPDATE_MANIFEST_ASSET: &str = "latest.json";
@@ -219,7 +219,18 @@ pub async fn check_for_update(
 
 #[cfg(test)]
 mod tests {
-	use super::{select_update_release, GithubRelease, GithubReleaseAsset};
+	use super::{
+		select_update_release, GithubRelease, GithubReleaseAsset,
+		GITHUB_RELEASES_API,
+	};
+
+	#[test]
+	fn beta_channel_queries_the_current_repository() {
+		assert_eq!(
+			GITHUB_RELEASES_API,
+			"https://api.github.com/repos/lbxAOA/ModelToolbox/releases?per_page=100"
+		);
+	}
 
 	fn release(tag_name: &str, prerelease: bool) -> GithubRelease {
 		GithubRelease {
