@@ -73,7 +73,7 @@
 		seeded.delete("lastSeenWhatsNewVersion");
 	}
 	if (!persistedEntries && onboardingMode === "upgrade") {
-		seeded.set("lastSeenWhatsNewVersion", "0.1.0");
+		seeded.set("lastSeenWhatsNewVersion", "0.1.1");
 	}
 	storeData.set("store.json", seeded);
 
