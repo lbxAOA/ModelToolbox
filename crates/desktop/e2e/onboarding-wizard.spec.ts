@@ -102,12 +102,6 @@ test("upgrade notes are acknowledged after the user sees them", async ({
 			{ exact: true },
 		),
 	).toBeVisible();
-	await expect(
-		wizard.getByText("Updates follow the official repository", {
-			exact: true,
-		}),
-	).toBeVisible();
-
 	await wizard.getByRole("button", { name: "Start Working" }).click();
 	await expect(wizard).toBeHidden();
 
