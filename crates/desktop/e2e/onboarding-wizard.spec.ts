@@ -84,21 +84,21 @@ test("upgrade notes are acknowledged after the user sees them", async ({
 	});
 
 	await expect(wizard).toBeVisible();
-	await expect(wizard.getByText("What's new in 0.1.1")).toBeVisible();
+	await expect(wizard.getByText("What's new in 0.1.2")).toBeVisible();
 	await expect(
 		wizard
 			.locator("[data-slot='modal-header']")
 			.getByText(
-				"ModelToolbox 0.1.1 fixes update checks so beta releases are resolved from the official lbxAOA/ModelToolbox repository.",
+				"ModelToolbox 0.1.2 introduces Hermes Agent support and removes the dedicated CLion integration.",
 			),
 	).toHaveCSS("font-weight", "400");
 	await expect(wizard.getByRole("heading", { level: 4 })).toHaveText([
-		"Fixes and maintenance",
+		"New features",
 		"Known issues",
 	]);
 	await expect(
 		wizard.getByText(
-			"ModelToolbox 0.1.1 fixes update checks so beta releases are resolved from the official lbxAOA/ModelToolbox repository.",
+			"ModelToolbox 0.1.2 introduces Hermes Agent support and removes the dedicated CLion integration.",
 			{ exact: true },
 		),
 	).toBeVisible();

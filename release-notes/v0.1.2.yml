@@ -1,0 +1,36 @@
+version: 0.1.2
+channel: stable
+title:
+    en: "Hermes Agent support"
+    zh-Hans: "新增 Hermes Agent 支持"
+    zh-Hant: "新增 Hermes Agent 支援"
+announcement:
+    en: "ModelToolbox 0.1.2 introduces Hermes Agent support and removes the dedicated CLion integration."
+    zh-Hans: "ModelToolbox 0.1.2 新增 Hermes Agent 支持，并移除 CLion 专属集成。"
+    zh-Hant: "ModelToolbox 0.1.2 新增 Hermes Agent 支援，並移除 CLion 專屬整合。"
+summary:
+    en: "Manage Hermes MCP servers, Skills, and instruction files from one place."
+    zh-Hans: "可在统一界面管理 Hermes MCP 服务、Skills 与指令文件。"
+    zh-Hant: "可在統一介面管理 Hermes MCP 服務、Skills 與指令檔。"
+highlights:
+    - id: hermes-agent-integration
+      icon: sparkles
+      category: feature
+      title:
+          en: "Hermes Agent is now supported"
+          zh-Hans: "现已支持 Hermes Agent"
+          zh-Hant: "現已支援 Hermes Agent"
+      description:
+          en: "Read and manage Hermes global MCP servers, discover global and project Skills, and surface SOUL.md and AGENTS.md instruction paths."
+          zh-Hans: "可读取和管理 Hermes 全局 MCP 服务，发现全局与项目 Skills，并展示 SOUL.md 与 AGENTS.md 指令路径。"
+          zh-Hant: "可讀取和管理 Hermes 全域 MCP 服務，發現全域與專案 Skills，並顯示 SOUL.md 與 AGENTS.md 指令路徑。"
+knownIssues:
+    - id: local-windows-build-toolchain
+      title:
+          en: "Local Windows builds require Microsoft C++ Build Tools"
+          zh-Hans: "本地 Windows 构建需要 Microsoft C++ Build Tools"
+          zh-Hant: "本機 Windows 建置需要 Microsoft C++ Build Tools"
+      description:
+          en: "Install the Visual Studio C++ Build Tools workload when building locally. Hosted release builds run on GitHub Actions runners with the required toolchain."
+          zh-Hans: "本地构建时请安装 Visual Studio C++ Build Tools 工作负载。托管发布构建在已具备该工具链的 GitHub Actions 运行器上执行。"
+          zh-Hant: "本機建置時請安裝 Visual Studio C++ Build Tools 工作負載。託管發行建置在已具備該工具鏈的 GitHub Actions 執行器上執行。"

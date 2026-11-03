@@ -8,7 +8,6 @@ pub static ALL_AGENTS: &[&AgentDescriptor] = &[
 	&agents::hermes::DESCRIPTOR,
 	&agents::gemini::DESCRIPTOR,
 	&agents::cline::DESCRIPTOR,
-	&agents::clion::DESCRIPTOR,
 	&agents::copilot::DESCRIPTOR,
 	&agents::cursor::DESCRIPTOR,
 	&agents::antigravity::DESCRIPTOR,
