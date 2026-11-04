@@ -3,7 +3,6 @@ pub mod antigravity;
 pub mod augmentcode;
 pub mod claude;
 pub mod cline;
-pub mod clion;
 pub mod codex;
 pub mod copilot;
 pub mod cursor;

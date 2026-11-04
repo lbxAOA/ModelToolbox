@@ -73,7 +73,7 @@
 		seeded.delete("lastSeenWhatsNewVersion");
 	}
 	if (!persistedEntries && onboardingMode === "upgrade") {
-		seeded.set("lastSeenWhatsNewVersion", "0.1.0");
+		seeded.set("lastSeenWhatsNewVersion", "0.1.1");
 	}
 	storeData.set("store.json", seeded);
 
@@ -91,7 +91,7 @@
 			case "plugin:app|name":
 				return Promise.resolve("model-toolbox");
 			case "plugin:app|version":
-				return Promise.resolve("0.1.1");
+				return Promise.resolve("0.1.2");
 			case "posthog_get_config":
 				return Promise.resolve({ key: null, host: null });
 			case "posthog_get_distinct_id":

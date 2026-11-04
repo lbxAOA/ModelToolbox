@@ -10,11 +10,14 @@ use std::path::PathBuf;
 use std::str::FromStr;
 
 #[test]
-fn test_hermes_and_clion_descriptors_are_registered_contracts() {
+fn test_hermes_and_jetbrains_ai_descriptors_are_registered_contracts() {
 	use model_toolbox_agents::agents;
 
 	assert_eq!(AgentType::from_str("hermes").unwrap(), AgentType::Hermes);
-	assert_eq!(AgentType::from_str("clion").unwrap(), AgentType::Clion);
+	assert_eq!(
+		AgentType::from_str("jetbrains-ai").unwrap(),
+		AgentType::JetBrainsAi
+	);
 
 	let hermes = &agents::hermes::DESCRIPTOR;
 	assert_eq!(hermes.id, "hermes");
@@ -34,13 +37,12 @@ fn test_hermes_and_clion_descriptors_are_registered_contracts() {
 	assert!(hermes.capabilities.skills.scopes.global);
 	assert!(hermes.capabilities.skills.scopes.project);
 
-	let clion = &agents::clion::DESCRIPTOR;
-	assert_eq!(clion.id, "clion");
-	assert_eq!(clion.display_name, "CLion (JetBrains AI)");
-	assert_eq!(clion.cli_name, "clion");
-	assert!(!clion.capabilities.mcp.scopes.global);
-	assert!(!clion.capabilities.mcp.scopes.project);
-	assert!(clion.project_markers.contains(&".idea"));
+	let jetbrains_ai = &agents::jetbrains_ai::DESCRIPTOR;
+	assert_eq!(jetbrains_ai.id, "jetbrains-ai");
+	assert_eq!(jetbrains_ai.display_name, "JetBrains AI");
+	assert_eq!(jetbrains_ai.cli_name, "jetbrains");
+	assert!(!jetbrains_ai.capabilities.mcp.scopes.global);
+	assert!(!jetbrains_ai.capabilities.mcp.scopes.project);
 }
 
 /// Helper to get home directory for path assertions
@@ -59,7 +61,6 @@ fn all_descriptors() -> Vec<(AgentType, &'static AgentDescriptor)> {
 		(AgentType::Hermes, &agents::hermes::DESCRIPTOR),
 		(AgentType::Gemini, &agents::gemini::DESCRIPTOR),
 		(AgentType::Cline, &agents::cline::DESCRIPTOR),
-		(AgentType::Clion, &agents::clion::DESCRIPTOR),
 		(AgentType::Copilot, &agents::copilot::DESCRIPTOR),
 		(AgentType::Cursor, &agents::cursor::DESCRIPTOR),
 		(AgentType::Antigravity, &agents::antigravity::DESCRIPTOR),
