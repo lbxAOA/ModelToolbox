@@ -1,4 +1,4 @@
-import { Avatar, Button, Card, Spinner, Switch, toast } from "@heroui/react";
+import { Button, Card, Spinner, Switch, toast } from "@heroui/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { getName, getVersion } from "@tauri-apps/api/app";
 import {
@@ -6,7 +6,6 @@ import {
 	enable as enableAutostart,
 	isEnabled as isAutostartEnabled,
 } from "@tauri-apps/plugin-autostart";
-import { openUrl } from "@tauri-apps/plugin-opener";
 import { relaunch } from "@tauri-apps/plugin-process";
 import { useEffect } from "react";
 import { useTranslation } from "react-i18next";
@@ -197,27 +196,6 @@ export default function ApplicationPanel() {
 	const checkButtonLabel = hasCheckedForUpdates
 		? t("checkAgain")
 		: t("checkForUpdates");
-
-	const teamMembers = [
-		{
-			name: "AkaraChen",
-			role: t("headDev"),
-			avatar: "https://avatars.githubusercontent.com/u/85140972?v=4",
-			githubUrl: "https://github.com/AkaraChen",
-		},
-		{
-			name: "Flacier",
-			role: t("developer"),
-			avatar: "https://avatars.githubusercontent.com/u/48170241?v=4",
-			githubUrl: "https://github.com/Fldicoahkiin",
-		},
-		{
-			name: "danielchim",
-			role: t("designer"),
-			avatar: "https://avatars.githubusercontent.com/u/12156547?v=4",
-			githubUrl: "https://github.com/danielchim",
-		},
-	];
 
 	return (
 		<div className="space-y-4">
@@ -493,37 +471,6 @@ export default function ApplicationPanel() {
 								{t("replayProjectTour")}
 							</Button>
 						</div>
-					</div>
-				</Card.Content>
-			</Card>
-
-			<Card className="p-0">
-				<Card.Content className="p-4">
-					<span className="text-sm font-medium text-(--foreground)">
-						{t("team")}
-					</span>
-					<div className="mt-4 grid grid-cols-3 gap-4">
-						{teamMembers.map((member) => (
-							<button
-								key={member.name}
-								type="button"
-								className="flex flex-col items-center text-center cursor-pointer"
-								onClick={() => openUrl(member.githubUrl)}
-							>
-								<Avatar size="lg">
-									<Avatar.Image
-										src={member.avatar}
-										alt={member.name}
-									/>
-								</Avatar>
-								<span className="mt-2 text-sm font-medium">
-									{member.name}
-								</span>
-								<span className="text-xs text-muted">
-									{member.role}
-								</span>
-							</button>
-						))}
 					</div>
 				</Card.Content>
 			</Card>
