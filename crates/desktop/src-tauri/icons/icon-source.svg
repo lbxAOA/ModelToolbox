@@ -1,0 +1,22 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="background" x1="112" y1="84" x2="912" y2="940" gradientUnits="userSpaceOnUse"><stop stop-color="#177FD3"/><stop offset="1" stop-color="#0A4E9D"/></linearGradient>
+    <linearGradient id="panel" x1="212" y1="216" x2="812" y2="806" gradientUnits="userSpaceOnUse"><stop stop-color="#0A3E78"/><stop offset="1" stop-color="#082E61"/></linearGradient>
+    <linearGradient id="ribbon" x1="242" y1="354" x2="800" y2="700" gradientUnits="userSpaceOnUse"><stop stop-color="#6EEAFF"/><stop offset="1" stop-color="#B1DBFF"/></linearGradient>
+    <filter id="shadow" x="126" y="132" width="772" height="768" filterUnits="userSpaceOnUse"><feDropShadow dx="0" dy="22" stdDeviation="24" flood-color="#06366E" flood-opacity="0.46"/></filter>
+  </defs>
+  <rect width="1024" height="1024" rx="232" fill="url(#background)"/>
+  <path d="M0 786C176 686 318 760 512 844C678 916 814 928 1024 824V1024H0V786Z" fill="#06458F" opacity="0.22"/>
+  <g filter="url(#shadow)">
+    <!-- A restrained terminal window: the primary product surface. -->
+    <rect x="174" y="196" width="676" height="632" rx="104" fill="url(#panel)" stroke="#A9DBFF" stroke-width="20"/>
+    <path d="M174 372H850" stroke="#83C8F8" stroke-width="18" opacity="0.86"/>
+    <circle cx="254" cy="284" r="17" fill="#A9DBFF"/>
+    <circle cx="308" cy="284" r="17" fill="#A9DBFF" opacity="0.64"/>
+    <circle cx="362" cy="284" r="17" fill="#A9DBFF" opacity="0.34"/>
+    <!-- Wide angular mark references code-editor geometry without copying a product logo. -->
+    <path d="M268 494L408 612L268 730" stroke="url(#ribbon)" stroke-width="48" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M468 730H692" stroke="#E4F6FF" stroke-width="48" stroke-linecap="round"/>
+    <path d="M468 648H618" stroke="#79CBFF" stroke-width="24" stroke-linecap="round" opacity="0.75"/>
+  </g>
+</svg>

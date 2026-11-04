@@ -1,0 +1,47 @@
+version: 0.1.3
+channel: stable
+title:
+    en: "Refined desktop identity"
+    zh-Hans: "桌面端视觉与升级体验优化"
+    zh-Hant: "桌面端視覺與升級體驗優化"
+announcement:
+    en: "ModelToolbox 0.1.3 refines the desktop identity and update onboarding experience."
+    zh-Hans: "ModelToolbox 0.1.3 优化桌面端视觉标识与升级引导体验。"
+    zh-Hant: "ModelToolbox 0.1.3 優化桌面端視覺識別與升級引導體驗。"
+summary:
+    en: "A new desktop icon, a simpler About page, and updated upgrade-flow coverage."
+    zh-Hans: "提供全新桌面图标、更简洁的“关于”页面，以及更新后的升级流程测试覆盖。"
+    zh-Hant: "提供全新桌面圖示、更簡潔的「關於」頁面，以及更新後的升級流程測試覆蓋。"
+highlights:
+    - id: desktop-icon-refresh
+      icon: sparkles
+      category: feature
+      title:
+          en: "New desktop icon"
+          zh-Hans: "全新桌面端图标"
+          zh-Hant: "全新桌面端圖示"
+      description:
+          en: "The desktop app now uses a clean terminal-inspired icon designed for developer tooling."
+          zh-Hans: "桌面应用现采用简洁的终端风格图标，更贴合开发者工具定位。"
+          zh-Hant: "桌面應用程式現採用簡潔的終端風格圖示，更貼合開發者工具定位。"
+    - id: simpler-about-page
+      icon: layout
+      category: improvement
+      title:
+          en: "Simpler About page"
+          zh-Hans: "更简洁的“关于”页面"
+          zh-Hant: "更簡潔的「關於」頁面"
+      description:
+          en: "The About page now focuses on application information, updates, and onboarding controls."
+          zh-Hans: "“关于”页面现聚焦应用信息、更新与引导控制项。"
+          zh-Hant: "「關於」頁面現聚焦應用程式資訊、更新與引導控制項。"
+knownIssues:
+    - id: local-windows-build-toolchain
+      title:
+          en: "Local Windows builds require Microsoft C++ Build Tools"
+          zh-Hans: "本地 Windows 构建需要 Microsoft C++ Build Tools"
+          zh-Hant: "本機 Windows 建置需要 Microsoft C++ Build Tools"
+      description:
+          en: "Install the Visual Studio C++ Build Tools workload when building locally. Hosted release builds run on GitHub Actions runners with the required toolchain."
+          zh-Hans: "本地构建时请安装 Visual Studio C++ Build Tools 工作负载。托管发布构建在已具备该工具链的 GitHub Actions 运行器上执行。"
+          zh-Hant: "本機建置時請安裝 Visual Studio C++ Build Tools 工作負載。托管發行建置在已具備該工具鏈的 GitHub Actions 執行器上執行。"
