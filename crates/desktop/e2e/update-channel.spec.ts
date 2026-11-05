@@ -22,20 +22,6 @@ test("beta updates stay opt-in and are persisted before checking", async ({
 
 	const betaUpdates = page.getByLabel("Receive beta updates");
 	await expect(betaUpdates).not.toBeChecked();
-	await expect
-		.poll(() =>
-			page.evaluate(() =>
-				(
-					window as unknown as {
-						__MODEL_TOOLBOX_E2E__: UpdateTestState;
-					}
-				).__MODEL_TOOLBOX_E2E__
-					.getUpdateChecks()
-					.at(0),
-			),
-		)
-		.toBe("stable");
-
 	await betaUpdates.focus();
 	await betaUpdates.press("Space");
 	await expect(betaUpdates).toBeChecked();
@@ -51,14 +37,7 @@ test("beta updates stay opt-in and are persisted before checking", async ({
 		)
 		.toBe("beta");
 
-	await page.evaluate(() =>
-		(
-			window as unknown as {
-				__MODEL_TOOLBOX_E2E__: UpdateTestState;
-			}
-		).__MODEL_TOOLBOX_E2E__.clearUpdateChecks(),
-	);
-	await page.getByRole("button", { name: "Check for Updates" }).click();
+	// Startup checks are intentionally silent; manual checks remain in About.
 	await expect
 		.poll(() =>
 			page.evaluate(() =>
@@ -66,12 +45,10 @@ test("beta updates stay opt-in and are persisted before checking", async ({
 					window as unknown as {
 						__MODEL_TOOLBOX_E2E__: UpdateTestState;
 					}
-				).__MODEL_TOOLBOX_E2E__
-					.getUpdateChecks()
-					.at(-1),
+				).__MODEL_TOOLBOX_E2E__.getUpdateChecks(),
 			),
 		)
-		.toBe("beta");
+		.toEqual([]);
 });
 
 test("download action stays legible in dark mode while pending", async ({

@@ -390,6 +390,72 @@
 			"knownIssues": []
 		},
 		{
+			"version": "0.1.4",
+			"channel": "stable",
+			"title": {
+				"en": "Unified update controls",
+				"zh-Hans": "统一更新入口与暗色图标优化",
+				"zh-Hant": "統一更新入口與深色圖示最佳化"
+			},
+			"summary": {
+				"en": "Update notifications are centralized in About, and the Hermes Agent icon now has dark-mode contrast support.",
+				"zh-Hans": "更新提示与操作集中到“关于”页面，Hermes Agent 图标现支持深色模式高对比显示。",
+				"zh-Hant": "更新提示與操作集中至「關於」頁面，Hermes Agent 圖示現支援深色模式高對比顯示。"
+			},
+			"announcement": {
+				"en": "ModelToolbox 0.1.4 consolidates update controls in About and improves Hermes visibility in dark mode.",
+				"zh-Hans": "ModelToolbox 0.1.4 将更新操作统一至“关于”页面，并优化 Hermes 在深色模式下的显示。",
+				"zh-Hant": "ModelToolbox 0.1.4 將更新操作統一至「關於」頁面，並最佳化 Hermes 在深色模式下的顯示。"
+			},
+			"highlights": [
+				{
+					"id": "unified-update-controls",
+					"icon": "sync",
+					"category": "improvement",
+					"title": {
+						"en": "Updates are managed in About",
+						"zh-Hans": "更新统一在“关于”中管理",
+						"zh-Hant": "更新統一在「關於」中管理"
+					},
+					"description": {
+						"en": "App and ccusage update status and actions are now available in one place, without usage-page update prompts or startup notifications.",
+						"zh-Hans": "应用与 ccusage 的更新状态和操作现集中在一个位置，不再在用量页面或启动时显示更新提示。",
+						"zh-Hant": "應用程式與 ccusage 的更新狀態和操作現集中在一個位置，不再在用量頁面或啟動時顯示更新提示。"
+					}
+				},
+				{
+					"id": "hermes-dark-icon",
+					"icon": "sparkles",
+					"category": "improvement",
+					"title": {
+						"en": "Improved Hermes dark-mode icon",
+						"zh-Hans": "优化 Hermes 深色模式图标",
+						"zh-Hant": "最佳化 Hermes 深色模式圖示"
+					},
+					"description": {
+						"en": "The Hermes Agent icon now inverts in dark mode for clear, consistent contrast across the app.",
+						"zh-Hans": "Hermes Agent 图标现在会在深色模式下自动反色，确保在各处都有清晰一致的对比度。",
+						"zh-Hant": "Hermes Agent 圖示現在會在深色模式下自動反色，確保在各處都有清晰一致的對比度。"
+					}
+				}
+			],
+			"knownIssues": [
+				{
+					"id": "local-windows-build-toolchain",
+					"title": {
+						"en": "Local Windows builds require Microsoft C++ Build Tools",
+						"zh-Hans": "本地 Windows 构建需要 Microsoft C++ Build Tools",
+						"zh-Hant": "本機 Windows 建置需要 Microsoft C++ Build Tools"
+					},
+					"description": {
+						"en": "Install the Visual Studio C++ Build Tools workload when building locally. Hosted release builds run on GitHub Actions runners with the required toolchain.",
+						"zh-Hans": "本地构建时请安装 Visual Studio C++ Build Tools 工作负载。托管发布构建在已具备该工具链的 GitHub Actions 运行器上执行。",
+						"zh-Hant": "本機建置時請安裝 Visual Studio C++ Build Tools 工作負載。託管發行建置在已具備該工具鏈的 GitHub Actions 執行器上執行。"
+					}
+				}
+			]
+		},
+		{
 			"version": "0.1.3",
 			"channel": "stable",
 			"title": {

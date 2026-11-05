@@ -172,11 +172,6 @@ export default function UsagePage() {
 									? statusQuery.error.message
 									: undefined)
 							}
-							latestVersion={
-								status?.update_available
-									? status.latest_version
-									: null
-							}
 						/>
 						<Tooltip delay={400}>
 							<Button
@@ -357,13 +352,11 @@ function UsageStatus({
 	reachable,
 	isPending,
 	error,
-	latestVersion,
 }: {
 	version: string | null;
 	reachable?: boolean;
 	isPending: boolean;
 	error?: string | null;
-	latestVersion?: string | null;
 }) {
 	const { t } = useTranslation();
 	return (
@@ -392,18 +385,6 @@ function UsageStatus({
 							? shortCcusageVersion(version)
 							: "ccusage"}
 			</span>
-			{latestVersion && (
-				<>
-					<span aria-hidden className="text-muted">
-						·
-					</span>
-					<span className="shrink-0 text-accent tabular-nums">
-						{t("usageStatusUpdate", {
-							version: shortCcusageVersion(latestVersion),
-						})}
-					</span>
-				</>
-			)}
 		</div>
 	);
 }

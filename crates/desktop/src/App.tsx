@@ -11,7 +11,6 @@ import { lazy, Suspense, useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useKeyBindings } from "rooks";
 import { Route, Router, Switch, useLocation } from "wouter";
-import { AutoUpdateChecker } from "./components/auto-update-checker";
 import { DeepLinkImportModal } from "./components/deep-link-import-modal";
 import { OnboardingController } from "./components/onboarding-controller";
 import { Redirect } from "./components/redirect";
@@ -189,7 +188,6 @@ function App() {
 						<NuqsAdapter>
 							<Router>
 								<OnboardingController />
-								<AutoUpdateChecker />
 								<Switch>
 									<Route path="/">
 										<MainLayout>

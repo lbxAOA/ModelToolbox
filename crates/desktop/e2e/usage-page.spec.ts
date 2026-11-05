@@ -126,34 +126,14 @@ test("usage page shows summary, daily strip, and per-agent rows", async ({
 
 	await expect(page.getByRole("heading", { name: "Usage" })).toBeVisible();
 
-	// Version and update availability stay together as quiet, unboxed status
-	// text. Installation and update actions live in Settings.
+	// Update notices are deliberately centralized in Settings → About.
 	const usageStatus = page.getByRole("status").filter({
-		hasText: "v20.0.17 available",
-	});
-	const updateHint = usageStatus.getByText("v20.0.17 available", {
-		exact: true,
+		hasText: "20.0.6",
 	});
 	await expect(usageStatus).toContainText("20.0.6");
-	await expect(updateHint).toBeVisible();
-	await expect(updateHint.locator("xpath=ancestor::button")).toHaveCount(0);
-	const updateHintStyle = await updateHint.evaluate((element) => {
-		const style = getComputedStyle(element);
-		return {
-			backgroundColor: style.backgroundColor,
-			borderBottomWidth: style.borderBottomWidth,
-			borderLeftWidth: style.borderLeftWidth,
-			borderRightWidth: style.borderRightWidth,
-			borderTopWidth: style.borderTopWidth,
-		};
-	});
-	expect(updateHintStyle).toEqual({
-		backgroundColor: "rgba(0, 0, 0, 0)",
-		borderBottomWidth: "0px",
-		borderLeftWidth: "0px",
-		borderRightWidth: "0px",
-		borderTopWidth: "0px",
-	});
+	await expect(
+		page.getByText("v20.0.17 available", { exact: true }),
+	).toHaveCount(0);
 
 	// Cross-agent summary stats: spend total and active days (2 of the 3
 	// mocked days carry usage).
