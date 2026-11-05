@@ -127,7 +127,9 @@ test("usage page shows summary, daily strip, and per-agent rows", async ({
 	await expect(page.getByRole("heading", { name: "Usage" })).toBeVisible();
 
 	// Update notices are deliberately centralized in Settings → About.
-	const usageStatus = page.getByRole("status");
+	const usageStatus = page.getByRole("status").filter({
+		hasText: "20.0.6",
+	});
 	await expect(usageStatus).toContainText("20.0.6");
 	await expect(
 		page.getByText("v20.0.17 available", { exact: true }),
