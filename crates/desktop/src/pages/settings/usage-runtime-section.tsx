@@ -9,7 +9,6 @@ import {
 	installUsageRuntimeMutationOptions,
 	refreshUsageRuntimeMutationOptions,
 	setUsageRuntimeMutationOptions,
-	updateUsageRuntimeMutationOptions,
 	usageRuntimeQueryOptions,
 } from "../../requests/usage";
 import { RuntimeSourceControls } from "./usage-runtime-source";
@@ -25,20 +24,15 @@ export function UsageRuntimeSection() {
 	const installMutation = useMutation(
 		installUsageRuntimeMutationOptions({ api, queryClient }),
 	);
-	const updateMutation = useMutation(
-		updateUsageRuntimeMutationOptions({ api, queryClient }),
-	);
 	const refreshMutation = useMutation(
 		refreshUsageRuntimeMutationOptions({ api, queryClient }),
 	);
 	const runtime = runtimeQuery.data;
 	const canInstall =
 		runtime?.candidates.some((candidate) => candidate.can_install) ?? false;
-	const canUpdate = runtime?.active?.can_update === true;
 	const isOperating =
 		selectMutation.isPending ||
 		installMutation.isPending ||
-		updateMutation.isPending ||
 		refreshMutation.isPending;
 	const queryError =
 		runtimeQuery.error instanceof Error
@@ -47,67 +41,29 @@ export function UsageRuntimeSection() {
 	const statusError = runtime?.error ?? queryError;
 	const isChecking = runtimeQuery.isPending || refreshMutation.isPending;
 	const isStatusPending =
-		isChecking ||
-		selectMutation.isPending ||
-		installMutation.isPending ||
-		updateMutation.isPending;
+		isChecking || selectMutation.isPending || installMutation.isPending;
 	let statusKey = "usageRuntimeStatusUnavailable";
 	if (selectMutation.isPending) {
 		statusKey = "usageRuntimeStatusSwitching";
 	} else if (installMutation.isPending) {
 		statusKey = "usageRuntimeStatusInstalling";
-	} else if (updateMutation.isPending) {
-		statusKey = "usageRuntimeStatusUpdating";
 	} else if (isChecking) {
 		statusKey = "usageRuntimeStatusChecking";
 	} else if (statusError && runtime?.active) {
 		statusKey = "usageRuntimeStatusCheckFailed";
-	} else if (runtime?.update_available) {
-		statusKey = "usageRuntimeStatusUpdateAvailable";
 	} else if (runtime?.active && runtime.latest_version) {
 		statusKey = "usageRuntimeStatusUpToDate";
 	} else if (runtime?.active) {
 		statusKey = "usageRuntimeStatusReady";
 	}
-	const latestVersion = runtime?.latest_version
-		? shortCcusageVersion(runtime.latest_version)
-		: null;
 	const activeVersion = runtime?.active?.version
 		? shortCcusageVersion(runtime.active.version)
 		: null;
-	const showUpdate = runtime?.update_available && canUpdate;
-	const showManagedInstall =
-		runtime?.update_available &&
-		runtime.active &&
-		runtime.active.source !== "environment" &&
-		!canUpdate &&
-		canInstall;
 	const showInitialInstall = runtime && !runtime.active && canInstall;
 	const reportError = (error: Error) => toast.danger(error.message);
 	const actions = (
 		<>
-			{showUpdate && (
-				<Button
-					size="sm"
-					variant="secondary"
-					isPending={updateMutation.isPending}
-					isDisabled={isOperating && !updateMutation.isPending}
-					onPress={() =>
-						updateMutation.mutate(undefined, {
-							onSuccess: () =>
-								toast.success(t("usageRuntimeUpdated")),
-							onError: reportError,
-						})
-					}
-				>
-					{latestVersion
-						? t("usageRuntimeUpdateTo", {
-								version: latestVersion,
-							})
-						: t("usageRuntimeUpdate")}
-				</Button>
-			)}
-			{(showManagedInstall || showInitialInstall) && (
+			{showInitialInstall && (
 				<Button
 					size="sm"
 					variant="secondary"
@@ -124,11 +80,7 @@ export function UsageRuntimeSection() {
 						)
 					}
 				>
-					{showManagedInstall && latestVersion
-						? t("usageRuntimeInstallVersion", {
-								version: latestVersion,
-							})
-						: t("usageRuntimeInstall")}
+					{t("usageRuntimeInstall")}
 				</Button>
 			)}
 		</>
@@ -180,9 +132,7 @@ export function UsageRuntimeSection() {
 							? "text-muted"
 							: statusError || !runtime?.active
 								? "text-danger"
-								: runtime.update_available
-									? "text-accent"
-									: "text-muted",
+								: "text-muted",
 					)}
 				>
 					{t(statusKey)}

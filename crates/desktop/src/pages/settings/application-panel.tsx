@@ -9,10 +9,16 @@ import {
 import { relaunch } from "@tauri-apps/plugin-process";
 import { useEffect } from "react";
 import { useTranslation } from "react-i18next";
+import { useApi } from "../../hooks/use-api";
 import { saveAnalyticsPreference } from "../../lib/analytics-preference";
 import { dispatchOnboardingCommand } from "../../lib/onboarding";
 import { isWindows } from "../../lib/platform";
+import { shortCcusageVersion } from "../../lib/usage-format";
 import { getAnalyticsConsent } from "../../lib/store";
+import {
+	updateUsageRuntimeMutationOptions,
+	usageRuntimeQueryOptions,
+} from "../../requests/usage";
 import {
 	autoCheckUpdatesQueryOptions,
 	checkForUpdate,
@@ -25,6 +31,7 @@ import {
 export default function ApplicationPanel() {
 	const { t } = useTranslation();
 	const queryClient = useQueryClient();
+	const api = useApi();
 	const isWindowsOS = isWindows();
 
 	const { data: appInfo } = useQuery({
@@ -53,6 +60,18 @@ export default function ApplicationPanel() {
 		useQuery(autoCheckUpdatesQueryOptions());
 	const { data: updateChannel = "stable", isPending: isChannelLoading } =
 		useQuery(updateChannelQueryOptions());
+	const { data: usageRuntime } = useQuery(usageRuntimeQueryOptions({ api }));
+	const usageRuntimeUpdateMutation = useMutation({
+		...updateUsageRuntimeMutationOptions({ api, queryClient }),
+		onSuccess: () => {
+			toast.success(t("usageRuntimeUpdated"));
+		},
+		onError: (error) => {
+			toast.danger(
+				error instanceof Error ? error.message : t("updateError"),
+			);
+		},
+	});
 
 	const analyticsMutation = useMutation({
 		mutationFn: async (enabled: boolean) => {
@@ -221,6 +240,45 @@ export default function ApplicationPanel() {
 								{appInfo?.version ?? "0.1.0"}
 							</span>
 						</div>
+					</div>
+
+					<div className="flex items-center justify-between">
+						<div className="space-y-0.5">
+							<span className="text-sm font-medium text-(--foreground)">
+								{t("usageRuntimeUpdate")}
+							</span>
+							<span className="block text-xs text-muted">
+								{usageRuntime?.active?.version
+									? usageRuntime.update_available
+										? t("usageRuntimeUpdateTo", {
+												version: shortCcusageVersion(
+													usageRuntime.latest_version ??
+														"",
+												),
+											})
+										: shortCcusageVersion(
+												usageRuntime.active.version,
+											)
+									: t("usageRuntimeStatusUnavailable")}
+							</span>
+						</div>
+						{usageRuntime?.update_available &&
+							usageRuntime.active?.can_update && (
+								<Button
+									variant="secondary"
+									size="sm"
+									isPending={
+										usageRuntimeUpdateMutation.isPending
+									}
+									onPress={() =>
+										usageRuntimeUpdateMutation.mutate(
+											undefined,
+										)
+									}
+								>
+									{t("usageRuntimeUpdate")}
+								</Button>
+							)}
 					</div>
 
 					<div className="flex items-center justify-between">

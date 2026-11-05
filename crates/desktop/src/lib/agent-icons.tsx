@@ -36,6 +36,7 @@ export function AgentIcon({
 
 	const variantClasses =
 		variant === "ghost" ? "" : "border border-border bg-surface-secondary";
+	const themeClasses = id === "hermes" ? "dark:[&_svg]:invert" : "";
 
 	if (svg) {
 		// Render SVG inside a square container with border
@@ -45,6 +46,7 @@ export function AgentIcon({
       flex items-center justify-center rounded-lg
       ${sizeClasses}
       ${variantClasses}
+      ${themeClasses}
     `}
 				// eslint-disable-next-line @eslint-react/dom-no-dangerously-set-innerhtml
 				dangerouslySetInnerHTML={{
